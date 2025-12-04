@@ -1,0 +1,13 @@
+python test.py \
+    --tasks_file ./what_distance_farthest/tasks.jsonl \
+    --point_cloud_dir ./what_distance_farthest/points \
+    --checkpoint ./checkpoints/checkpoint_rl.pth \
+    --model_name 3dr1 \
+    --output_dir ./eval_results/3dr1 \
+    --use_color \
+    --use_normal \
+    --vocab Qwen/Qwen2.5-7B \
+    --qformer_vocab google-bert/bert-base-uncased \
+    --detector point_encoder \
+    --device cuda \
+    --cache_path ./cache/3dr1
