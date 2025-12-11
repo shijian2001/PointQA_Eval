@@ -17,7 +17,7 @@ echo "🔧 Creating virtual environment..."
 echo "📂 Path: ${ENV_PATH}"
 
 # Create environment with Python 3.11
-uv venv "${ENV_PATH}" --python 3.10
+uv venv "${ENV_PATH}" --python 3.11
 
 if [ $? -eq 0 ]; then
     echo ""

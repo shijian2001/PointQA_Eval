@@ -1,0 +1,12 @@
+{
+  "total": 10,
+  "correct": 1,
+  "accuracy": 10.0,
+  "category_accuracy": {
+    "what_distance_farthest": {
+      "accuracy": 10.0,
+      "correct": 1,
+      "total": 10
+    }
+  }
+}

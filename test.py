@@ -1,10 +1,26 @@
 import os
 import json
-import argparse
 import numpy as np
 from tqdm import tqdm
 from typing import Dict, List, Any
 from collections import defaultdict
+import fire
+
+
+# Compatibility shim: ensure huggingface_hub.cached_download exists
+try:
+    from huggingface_hub import cached_download  # noqa: F401
+except Exception:
+    import huggingface_hub as _hf
+    if hasattr(_hf, "hf_hub_download"):
+        _hf.cached_download = _hf.hf_hub_download
+    else:
+        def _missing_cached_download(*args, **kwargs):
+            raise ImportError(
+                "huggingface_hub.cached_download and hf_hub_download are both unavailable; "
+                "install a compatible huggingface_hub version or update sentence-transformers."
+            )
+        _hf.cached_download = _missing_cached_download
 
 
 def load_tasks(tasks_file: str) -> List[Dict]:
@@ -80,8 +96,13 @@ def evaluate(model, tasks: List[Dict], point_cloud_dir: str, output_dir: str = N
             print(f"[ERROR] Load failed {pc_path}: {e}")
             continue
         
-        data = {'point_cloud': point_cloud, 'point_cloud_path': pc_path}
         choices = parse_options(task['options'])
+        data = {
+            'point_cloud': point_cloud,
+            'point_cloud_path': pc_path,
+            'question_text': task['question'],
+            'choices': choices,
+        }
         
         result = model.multiple_choice_qa(
             data=data, question=task['question'], choices=choices, answer=task['answer']
@@ -132,38 +153,84 @@ def evaluate(model, tasks: List[Dict], point_cloud_dir: str, output_dir: str = N
     return {'summary': summary, 'results': results}
 
 
-def main():
-    parser = argparse.ArgumentParser(description="3D Point Cloud QA Evaluation")
-    parser.add_argument('--tasks_file', type=str, required=True)
-    parser.add_argument('--point_cloud_dir', type=str, required=True)
-    parser.add_argument('--output_dir', type=str, default='./eval_results')
-    parser.add_argument('--model_name', type=str, default='3dr1')
-    parser.add_argument('--checkpoint', type=str, required=True)
-    parser.add_argument('--cache_path', type=str, default=None)
-    parser.add_argument('--use_color', action='store_true')
-    parser.add_argument('--use_normal', action='store_true')
-    parser.add_argument('--vocab', type=str, default='Qwen/Qwen2.5-7B')
-    parser.add_argument('--qformer_vocab', type=str, default='google-bert/bert-base-uncased')
-    parser.add_argument('--detector', type=str, default='point_encoder')
-    parser.add_argument('--device', type=str, default='cuda')
-    args = parser.parse_args()
-    
+def run(
+    tasks_file: str,
+    point_cloud_dir: str,
+    output_dir: str = './eval_results',
+    model_name: str = '3dr1',
+    checkpoint: str = None,
+    test_ckpt: str = None,
+    test_only: bool = False,
+    dataset: str = 'scannet',
+    cache_path: str = None,
+    use_color: bool = False,
+    use_normal: bool = False,
+    vocab: str = 'Qwen/Qwen2.5-7B',
+    qformer_vocab: str = 'google-bert/bert-base-uncased',
+    detector: str = 'point_encoder',
+    captioner: str = '3dr1',
+    checkpoint_dir: str = './results',
+    use_additional_encoders: bool = False,
+    use_depth: bool = False,
+    use_image: bool = False,
+    depth_encoder_dim: int = 256,
+    image_encoder_dim: int = 256,
+    enable_dynamic_views: bool = False,
+    view_selection_weight: float = 0.1,
+    use_pytorch3d_rendering: bool = False,
+    use_multimodal_model: bool = False,
+    device: str = 'cuda',
+    llava_model_base: str = None,
+    llava_pointcloud_tower_name: str = None,
+    llava_conv_mode: str = 'vicuna_v1',
+    llava_temperature: float = 1.0,
+    llava_top_p: float = None,
+    llava_num_beams: int = 1,
+    llava_max_new_tokens: int = 64,
+    llava_voxel_size: float = 0.02,
+):
+    checkpoint_path = test_ckpt or checkpoint
+    if checkpoint_path is None:
+        raise ValueError("Please provide --test_ckpt (official flag) or --checkpoint")
+
     from models.point_qa_model import create_point_qa_model
+
     model = create_point_qa_model(
-        model_name=args.model_name,
-        checkpoint_path=args.checkpoint,
-        cache_path=args.cache_path,
-        device=args.device,
-        use_color=args.use_color,
-        use_normal=args.use_normal,
-        vocab=args.vocab,
-        qformer_vocab=args.qformer_vocab,
-        detector=args.detector,
+        model_name=model_name,
+        checkpoint_path=checkpoint_path,
+        cache_path=cache_path,
+        device=device,
+        dataset=dataset,
+        test_only=test_only,
+        use_color=use_color,
+        use_normal=use_normal,
+        vocab=vocab,
+        qformer_vocab=qformer_vocab,
+        detector=detector,
+        captioner=captioner,
+        checkpoint_dir=checkpoint_dir,
+        use_additional_encoders=use_additional_encoders,
+        use_depth=use_depth,
+        use_image=use_image,
+        depth_encoder_dim=depth_encoder_dim,
+        image_encoder_dim=image_encoder_dim,
+        enable_dynamic_views=enable_dynamic_views,
+        view_selection_weight=view_selection_weight,
+        use_pytorch3d_rendering=use_pytorch3d_rendering,
+        use_multimodal_model=use_multimodal_model,
+        llava_model_base=llava_model_base,
+        llava_pointcloud_tower_name=llava_pointcloud_tower_name,
+        llava_conv_mode=llava_conv_mode,
+        llava_temperature=llava_temperature,
+        llava_top_p=llava_top_p,
+        llava_num_beams=llava_num_beams,
+        llava_max_new_tokens=llava_max_new_tokens,
+        llava_voxel_size=llava_voxel_size,
     )
-    
-    tasks = load_tasks(args.tasks_file)
-    evaluate(model, tasks, args.point_cloud_dir, args.output_dir)
+
+    tasks = load_tasks(tasks_file)
+    evaluate(model, tasks, point_cloud_dir, output_dir)
 
 
 if __name__ == '__main__':
-    main()
+    fire.Fire(run)

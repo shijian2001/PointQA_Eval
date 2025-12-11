@@ -1,0 +1,112 @@
+[
+  {
+    "question_id": 0,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the 3D character model?",
+    "ground_truth": "military tiltrotor aircraft",
+    "ground_truth_id": "B",
+    "prediction": "bird",
+    "prediction_letter": "",
+    "free_form_answer": "The bird is the object that is farthest from the 3D character model.",
+    "correct": false
+  },
+  {
+    "question_id": 1,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the building?",
+    "ground_truth": "building",
+    "ground_truth_id": "A",
+    "prediction": "",
+    "prediction_letter": "",
+    "free_form_answer": "The house is the object that is farthest from the building.",
+    "correct": false
+  },
+  {
+    "question_id": 2,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the short?",
+    "ground_truth": "humanoid creature",
+    "ground_truth_id": "A",
+    "prediction": "Buddhist statue",
+    "prediction_letter": "D",
+    "free_form_answer": "The object that is farthest from the short is (D) a Buddhist statue.",
+    "correct": false
+  },
+  {
+    "question_id": 3,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the Joshua tree?",
+    "ground_truth": "character",
+    "ground_truth_id": "C",
+    "prediction": "humanoid creature",
+    "prediction_letter": "",
+    "free_form_answer": "The humanoid creature is the object that is farthest from the Joshua tree.",
+    "correct": false
+  },
+  {
+    "question_id": 4,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the pot?",
+    "ground_truth": "creature",
+    "ground_truth_id": "D",
+    "prediction": "",
+    "prediction_letter": "",
+    "free_form_answer": "The humanoid creature is the object that is farthest from the pot.",
+    "correct": false
+  },
+  {
+    "question_id": 5,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the military tiltrotor aircraft?",
+    "ground_truth": "football trading card",
+    "ground_truth_id": "D",
+    "prediction": "duffel bag",
+    "prediction_letter": "",
+    "free_form_answer": "The object that is farthest from the military tiltrotor aircraft is the duffel bag.",
+    "correct": false
+  },
+  {
+    "question_id": 6,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the building?",
+    "ground_truth": "bottle",
+    "ground_truth_id": "A",
+    "prediction": "bottle",
+    "prediction_letter": "",
+    "free_form_answer": "The bottle is the object that is farthest from the building.",
+    "correct": true
+  },
+  {
+    "question_id": 7,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the house?",
+    "ground_truth": "character model",
+    "ground_truth_id": "B",
+    "prediction": "military tiltrotor aircraft",
+    "prediction_letter": "D",
+    "free_form_answer": "The correct answer is (D) military tiltrotor aircraft.",
+    "correct": false
+  },
+  {
+    "question_id": 8,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the military tiltrotor aircraft?",
+    "ground_truth": "Stormtrooper",
+    "ground_truth_id": "B",
+    "prediction": "creature",
+    "prediction_letter": "",
+    "free_form_answer": "The creature is the object that is farthest from the military tiltrotor aircraft.",
+    "correct": false
+  },
+  {
+    "question_id": 9,
+    "category": "what_distance_farthest",
+    "question": "What is the object that is farthest from the character?",
+    "ground_truth": "placeholder",
+    "ground_truth_id": "A",
+    "prediction": "",
+    "prediction_letter": "",
+    "free_form_answer": "The object that is farthest from the character is the radio receiver.",
+    "correct": false
+  }
+]

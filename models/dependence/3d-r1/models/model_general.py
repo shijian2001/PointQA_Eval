@@ -1,5 +1,7 @@
+import os
 import torch
 import importlib
+import importlib.util
 from torch import nn
 
 class CaptionNet(nn.Module):
@@ -26,22 +28,53 @@ class CaptionNet(nn.Module):
         self.captioner = None
         
         if args.detector is not None:
-            if args.detector == "detector_PointTransformerV3":
-                detector_module = importlib.import_module(
-                    f'models.point_transformer_v3.detector'
-                )
-                self.detector = detector_module.detector_PointTransformerV3(args, dataset_config)
-            else:
-                detector_module = importlib.import_module(
-                    f'models.{args.detector}.detector'
-                )
-                self.detector = detector_module.detector(args, dataset_config)
+            # Load detector module from local dependency folder by file path to avoid
+            # import conflicts with the host project's `models` package.
+            base_models_dir = os.path.dirname(__file__)
+            try:
+                if args.detector == "detector_PointTransformerV3":
+                    det_path = os.path.join(base_models_dir, 'point_transformer_v3', 'detector.py')
+                    spec = importlib.util.spec_from_file_location('dep_point_transformer_v3.detector', det_path)
+                    det_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(det_mod)
+                    detector_module = det_mod
+                    self.detector = detector_module.detector_PointTransformerV3(args, dataset_config)
+                else:
+                    det_path = os.path.join(base_models_dir, args.detector, 'detector.py')
+                    spec = importlib.util.spec_from_file_location(f'dep_{args.detector}.detector', det_path)
+                    det_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(det_mod)
+                    detector_module = det_mod
+                    self.detector = detector_module.detector(args, dataset_config)
+            except FileNotFoundError:
+                # Fall back to package import if file path resolution fails
+                if args.detector == "detector_PointTransformerV3":
+                    detector_module = importlib.import_module(
+                        f'models.point_transformer_v3.detector'
+                    )
+                    self.detector = detector_module.detector_PointTransformerV3(args, dataset_config)
+                else:
+                    detector_module = importlib.import_module(
+                        f'models.{args.detector}.detector'
+                    )
+                    self.detector = detector_module.detector(args, dataset_config)
         
         if args.captioner is not None:
-            captioner_module = importlib.import_module(
-                f'models.{args.captioner}.captioner'
-            )
-            self.captioner = captioner_module.captioner(args, train_dataset)
+            # Load captioner module by file path from dependency folder to avoid
+            # shadowing the project's own `models` package.
+            base_models_dir = os.path.dirname(__file__)
+            try:
+                cap_path = os.path.join(base_models_dir, args.captioner, 'captioner.py')
+                spec = importlib.util.spec_from_file_location(f'dep_{args.captioner}.captioner', cap_path)
+                cap_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(cap_mod)
+                captioner_module = cap_mod
+                self.captioner = captioner_module.captioner(args, train_dataset)
+            except FileNotFoundError:
+                captioner_module = importlib.import_module(
+                    f'models.{args.captioner}.captioner'
+                )
+                self.captioner = captioner_module.captioner(args, train_dataset)
         
         self.train()
         
