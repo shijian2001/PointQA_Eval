@@ -13,6 +13,7 @@ cankao/
 3D-R1/
 checkpoint/
 checkpoints/
+eval_results/
 notebooks/
 wandb/
 sweeps/

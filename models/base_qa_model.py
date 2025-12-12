@@ -9,6 +9,17 @@ import torch
 
 from models import Model
 
+import numpy as np
+import os
+
+def load_point_cloud(data):
+	if isinstance(data, np.ndarray):
+		return data
+	if isinstance(data, torch.Tensor):
+		return data.cpu().numpy()
+	if isinstance(data, str) and data.endswith('.npy') and os.path.exists(data):
+		return np.load(data)
+	raise ValueError(f"无法识别的点云输入类型: {type(data)}, value: {data}")
 
 def make_options(choices, format='letter'):
 	assert format in ['numeric', 'letter']
