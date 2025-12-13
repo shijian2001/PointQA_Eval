@@ -1,4 +1,4 @@
-from ReConV2.utils import registry
+from ..utils import registry
 
 
 MODELS = registry.Registry('models')

@@ -1,7 +1,7 @@
 import inspect
 import warnings
 from functools import partial
-from ReConV2.utils import config
+from . import config
 
 
 class Registry:

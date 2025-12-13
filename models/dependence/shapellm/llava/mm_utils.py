@@ -4,7 +4,7 @@ from plyfile import PlyData
 from sklearn.neighbors import NearestNeighbors
 
 from transformers import StoppingCriteria
-from llava.constants import POINT_TOKEN_INDEX
+from .constants import POINT_TOKEN_INDEX
 
 
 def interpolate_point_cloud(points, k):

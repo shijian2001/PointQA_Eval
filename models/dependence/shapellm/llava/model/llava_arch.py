@@ -21,7 +21,7 @@ import torch.nn as nn
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector
 
-from llava.constants import IGNORE_INDEX, POINT_TOKEN_INDEX, DEFAULT_POINT_PATCH_TOKEN, DEFAULT_PT_START_TOKEN, \
+from ..constants import IGNORE_INDEX, POINT_TOKEN_INDEX, DEFAULT_POINT_PATCH_TOKEN, DEFAULT_PT_START_TOKEN, \
     DEFAULT_PT_END_TOKEN
 
 

@@ -71,14 +71,23 @@ class PointQAModel(QAModel):
             prompt_name=prompt_name,
             prompt_func=prompt_func,
             choice_format=choice_format,
-            enable_choice_search=False,
+            enable_choice_search=True,
             cache_path=cache_path,
         )
 
         if model_name not in point_qa_models:
             raise ValueError(f"Unknown point QA model: {model_name}")
 
-        ModelClass = point_qa_models[model_name]
+        model_class_name = point_qa_models[model_name]
+        print(f"Loading {model_name}...")
+        if isinstance(model_class_name, (tuple, list)):
+            model_class_name = model_class_name[0]
+        if isinstance(model_class_name, str):
+            ModelClass = globals().get(model_class_name)
+            if ModelClass is None:
+                raise ValueError(f"Model class '{model_class_name}' not found in globals().")
+        else:
+            ModelClass = model_class_name
         runtime_kwargs = dict(kwargs)
         runtime_kwargs.setdefault('checkpoint_path', checkpoint_path)
         runtime_kwargs.setdefault('device', device or ('cuda' if torch.cuda.is_available() else 'cpu'))
@@ -101,7 +110,6 @@ class PointQAModel(QAModel):
         return "unknown"
 
 
-
 class ThreeDLLava(QAModelInstance):
     def __init__(self, **kwargs):
         self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -117,13 +125,11 @@ class ThreeDLLava(QAModelInstance):
         self.voxel_size = kwargs.get('llava_voxel_size', 0.02)
         self.conv_mode = kwargs.get('llava_conv_mode', 'vicuna_v1')
 
-        try:
-            from llava.model.builder import load_pretrained_model
-            from llava.mm_utils import tokenizer_special_token, get_model_name_from_path
-            from llava.utils import disable_torch_init
-        except ImportError as exc:
-            raise ImportError("3D-LLaVA dependencies are missing. Please ensure the llava repo is available under models/dependence/3d-llava") from exc
-
+        
+        from models.dependence.threedllava.llava.model.builder import load_pretrained_model
+        from models.dependence.threedllava.llava.mm_utils import tokenizer_special_token, get_model_name_from_path
+        from models.dependence.threedllava.llava.utils import disable_torch_init
+            
         disable_torch_init()
         model_name = get_model_name_from_path(self.model_path)
         self.tokenizer_special_token = tokenizer_special_token
@@ -254,11 +260,11 @@ class ShapeLLM(QAModelInstance):
         self.max_new_tokens = kwargs.get('max_new_tokens', 2048)
 
         try:
-            from llava.utils import disable_torch_init
-            from llava.model.builder import load_pretrained_model
-            from llava.mm_utils import tokenizer_point_token, get_model_name_from_path, load_pts, process_pts
-            from llava.constants import POINT_TOKEN_INDEX, DEFAULT_POINT_TOKEN, DEFAULT_PT_START_TOKEN, DEFAULT_PT_END_TOKEN
-            from llava.conversation import conv_templates, SeparatorStyle
+            from models.dependence.shapellm.llava.utils import disable_torch_init
+            from models.dependence.shapellm.llava.model.builder import load_pretrained_model
+            from models.dependence.shapellm.llava.mm_utils import tokenizer_point_token, get_model_name_from_path, load_pts, process_pts
+            from models.dependence.shapellm.llava.constants import POINT_TOKEN_INDEX, DEFAULT_POINT_TOKEN, DEFAULT_PT_START_TOKEN, DEFAULT_PT_END_TOKEN
+            from models.dependence.shapellm.llava.conversation import conv_templates, SeparatorStyle
 
             self.tokenizer_point_token = tokenizer_point_token
             self.load_pts = load_pts

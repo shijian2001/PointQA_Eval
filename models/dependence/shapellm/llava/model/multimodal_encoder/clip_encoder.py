@@ -1,8 +1,8 @@
 import os
 import torch
 import torch.nn as nn
-from ReConV2.models.ReCon import ReCon2
-from ReConV2.utils.config import cfg_from_yaml_file
+from ....ReConV2.models.ReCon import ReCon2
+from ....ReConV2.utils.config import cfg_from_yaml_file
 
 
 class CLIPVisionTower(nn.Module):

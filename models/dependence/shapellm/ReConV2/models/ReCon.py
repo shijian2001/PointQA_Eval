@@ -7,10 +7,10 @@ from timm.layers import trunc_normal_
 from scipy.optimize import linear_sum_assignment
 
 from .build import MODELS
-from ReConV2.utils.logger import *
-from ReConV2.extensions.chamfer_distance import ChamferDistance
-from ReConV2.utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
-from ReConV2.models.transformer import Group, ZGroup, PatchEmbedding, PositionEmbeddingCoordsSine, GPTExtractor, \
+from ..utils.logger import *
+from ..extensions.chamfer_distance import ChamferDistance
+from ..utils.checkpoint import get_missing_parameters_message, get_unexpected_parameters_message
+from ..models.transformer import Group, ZGroup, PatchEmbedding, PositionEmbeddingCoordsSine, GPTExtractor, \
     GPTGenerator, MAEExtractor, MAEGenerator
 
 

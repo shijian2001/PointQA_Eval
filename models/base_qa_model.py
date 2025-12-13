@@ -1,16 +1,15 @@
 import json
 import random
 from typing import Callable
+import os
 
 import diskcache
 import numpy as np
 import sentence_transformers
 import torch
 
-from models import Model
 
-import numpy as np
-import os
+from models import Model
 
 def load_point_cloud(data):
 	if isinstance(data, np.ndarray):
@@ -21,6 +20,7 @@ def load_point_cloud(data):
 		return np.load(data)
 	raise ValueError(f"无法识别的点云输入类型: {type(data)}, value: {data}")
 
+	
 def make_options(choices, format='letter'):
 	assert format in ['numeric', 'letter']
 	if format == 'numeric':

@@ -5,9 +5,9 @@ import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ReConV2.utils import misc
-from ReConV2.utils.logger import *
-from ReConV2.utils.knn import knn_point
+from ..utils import misc
+from ..utils.logger import *
+from ..utils.knn import knn_point
 from timm.layers import Mlp, DropPath
 from typing import Optional, List
 
