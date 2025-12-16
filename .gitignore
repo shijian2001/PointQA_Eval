@@ -5,7 +5,7 @@ __pycache__/
 helpers/__pycache__
 models/__pycache__
 cache/
-data/
+/data/
 attention_data/
 results/
 res/
