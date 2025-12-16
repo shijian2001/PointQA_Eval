@@ -7,46 +7,13 @@ from typing import Dict, List, Any, Callable, Union, Sequence, Mapping
 from collections import OrderedDict
 
 from .base_qa_model import QAModel, QAModelInstance, load_point_cloud
+from .dependence.utils import ponder_collate_fn
 
 point_qa_models = {
     "3dllava": ("ThreeDLLava"),
     "shapellm": ("ShapeLLM"),
+    "pointllm": ("PointLLM"),
 }
-
-def ponder_collate_fn(batch, max_point=-1):
-    if not isinstance(batch, Sequence):
-        raise TypeError(f"{batch.dtype} is not supported.")
-
-    if max_point > 0:
-        accum_num_points = 0
-        ret_batches = []
-        for batch_id, data in enumerate(batch):
-            num_coords = data["coord"].shape[0]
-            if accum_num_points + num_coords > max_point:
-                continue
-            accum_num_points += num_coords
-            ret_batches.append(data)
-        return ponder_collate_fn(ret_batches, max_point)
-
-    if isinstance(batch[0], torch.Tensor):
-        return torch.cat(list(batch))
-    elif isinstance(batch[0], str):
-        return list(batch)
-    elif isinstance(batch[0], Sequence):
-        for data in batch:
-            data.append(torch.tensor([data[0].shape[0]]))
-        batch = [ponder_collate_fn(samples) for samples in zip(*batch)]
-        batch[-1] = torch.cumsum(batch[-1], dim=0).int()
-        return batch
-    elif isinstance(batch[0], Mapping):
-        batch_dict = {key: ponder_collate_fn([d[key] for d in batch]) for key in batch[0]}
-        for key in batch_dict.keys():
-            if "offset" in key:
-                batch_dict[key] = torch.cumsum(batch_dict[key], dim=0)
-        return batch_dict
-    else:
-        from torch.utils.data.dataloader import default_collate
-        return default_collate(batch)
 
 def list_point_qa_models() -> List[str]:
     return list(point_qa_models.keys())
@@ -122,14 +89,13 @@ class ThreeDLLava(QAModelInstance):
         self.top_p = kwargs.get('llava_top_p', None)
         self.num_beams = kwargs.get('llava_num_beams', 1)
         self.max_new_tokens = kwargs.get('llava_max_new_tokens', 64)
-        self.voxel_size = kwargs.get('llava_voxel_size', 0.02)
         self.conv_mode = kwargs.get('llava_conv_mode', 'vicuna_v1')
 
-        
         from models.dependence.threedllava.llava.model.builder import load_pretrained_model
         from models.dependence.threedllava.llava.mm_utils import tokenizer_special_token, get_model_name_from_path
         from models.dependence.threedllava.llava.utils import disable_torch_init
-            
+        from models.dependence.threedllava.llava.pc_utils import vqa_transform_eval, Compose
+
         disable_torch_init()
         model_name = get_model_name_from_path(self.model_path)
         self.tokenizer_special_token = tokenizer_special_token
@@ -142,54 +108,64 @@ class ThreeDLLava(QAModelInstance):
         self.model = self.model.to(self.device)
         self.model.eval()
 
-    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> Dict[str, torch.Tensor]:
-        # 统一用base的load_point_cloud
-        point_cloud = load_point_cloud(point_cloud)
-        if isinstance(point_cloud, np.ndarray):
-            point_cloud = torch.from_numpy(point_cloud).float()
-        if point_cloud.dim() != 2 or point_cloud.shape[1] < 3:
-            raise ValueError("Point cloud must be (N, 3+) shape for 3D-LLaVA")
-        coord = point_cloud[:, :3]
-        if point_cloud.shape[1] >= 6:
-            color = point_cloud[:, 3:6]
-            if color.max() > 2:
+        # Use official transform pipeline
+        self.transform = Compose(vqa_transform_eval)
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> Dict[str, Any]:
+        """Prepare point cloud dict compatible with 3D-LLaVA pipeline."""
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, torch.Tensor):
+            pc = pc.cpu().numpy()
+        if pc.ndim != 2 or pc.shape[1] < 3:
+            raise ValueError(f"Point cloud must be (N, 3+) shape for 3D-LLaVA, but got {pc.shape}")
+
+        coord = pc[:, :3].astype(np.float32)
+        if pc.shape[1] >= 6:
+            color = pc[:, 3:6].astype(np.float32)
+            if color.max() > 2.0:
                 color = color / 255.0
         else:
-            color = torch.zeros_like(coord)
-        grid_coord = torch.floor(coord / self.voxel_size).long()
-        superpoint_mask = torch.zeros(coord.shape[0], dtype=torch.int64)
-        feat = torch.cat([coord, color], dim=1)
-        offset = torch.tensor([coord.shape[0]], dtype=torch.int64)
-        return {
-            'coord': coord,
-            'color': color,
-            'grid_coord': grid_coord,
-            'superpoint_mask': superpoint_mask,
-            'condition': 'textgen',
-            'feat': feat,
-            'offset': offset,
-        }
+            color = np.zeros_like(coord, dtype=np.float32)
 
-    def _build_prompt(self, question_text: str) -> str:
-        return question_text
+        pc_dict = dict(
+            coord=coord,
+            color=color,
+            superpoint_mask=np.zeros(coord.shape[0], dtype=np.int64),
+        )
 
-    def _prepare_generation_inputs(self, pc_data: Dict[str, torch.Tensor]):
+        pc_dict = self.transform(pc_dict)
+        pc_dict['condition'] = 'textgen'
+
+        # Ensure tensors
+        for key in ['coord', 'grid_coord', 'feat', 'offset']:
+            if key in pc_dict and not torch.is_tensor(pc_dict[key]):
+                pc_dict[key] = torch.tensor(pc_dict[key])
+        if not torch.is_tensor(pc_dict['superpoint_mask']):
+            pc_dict['superpoint_mask'] = torch.tensor(pc_dict['superpoint_mask'])
+
+        return pc_dict
+
+    def _prepare_generation_inputs(self, pc_data: Dict[str, Any]):
         for key in ['coord', 'grid_coord', 'feat', 'offset']:
             pc_data[key] = ponder_collate_fn([pc_data[key]])
 
         grid_coords = pc_data['grid_coord']
-        grid_coords = torch.cat([torch.zeros(grid_coords.shape[0], 1, dtype=grid_coords.dtype), grid_coords], dim=1)
+        grid_coords = torch.cat([
+            torch.zeros(grid_coords.shape[0], 1, dtype=grid_coords.dtype),
+            grid_coords
+        ], dim=1)
         pc_data['grid_coord'] = grid_coords
 
         try:
-            from pointgroup_ops import voxelization_idx
+            from pointgroup_ops import voxelization_idx  # type: ignore
         except ImportError as exc:
-            raise ImportError("pointgroup_ops is required for 3D-LLaVA evaluation") from exc
+            raise ImportError(
+                "pointgroup_ops is required for 3D-LLaVA evaluation."
+            ) from exc
 
         batch_size = 1
-        voxel_coords, p2v_map, v2p_map = voxelization_idx(grid_coords, batch_size, 4)
-
         spatial_shape = np.clip((grid_coords.max(0)[0][1:] + 1).cpu().numpy(), 128, None)
+        voxel_coords, p2v_map, v2p_map = voxelization_idx(grid_coords, batch_size, 4)
 
         return {
             'coord': pc_data['coord'].to(self.device),
@@ -203,7 +179,7 @@ class ThreeDLLava(QAModelInstance):
             'conditions': [pc_data['condition']],
         }
 
-    def _generate_text(self, prompt: str, point_cloud: Union[np.ndarray, torch.Tensor]) -> str:
+    def _generate_text(self, prompt: str, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> str:
         pc_data = self._prepare_point_cloud(point_cloud)
         gen_inputs = self._prepare_generation_inputs(pc_data)
         input_ids = self.tokenizer_special_token(prompt, self.tokenizer, return_tensors='pt').unsqueeze(0).to(self.device)
@@ -235,13 +211,11 @@ class ThreeDLLava(QAModelInstance):
         return decoded
 
     def qa(self, data: Dict[str, Any], prompt: str) -> str:
-        question_text = data.get('question_text', prompt)
         point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
         if point_cloud is None:
             raise ValueError('Point cloud is required for 3D-LLaVA evaluation')
-        pc = load_point_cloud(point_cloud)
-        final_prompt = self._build_prompt(question_text)
-        return self._generate_text(final_prompt, pc)
+
+        return self._generate_text(prompt, point_cloud)
 
 
 class ShapeLLM(QAModelInstance):
@@ -337,6 +311,75 @@ class ShapeLLM(QAModelInstance):
         if outputs.endswith(stop_str):
             outputs = outputs[:-len(stop_str)]
         return outputs.strip()
+
+
+class PointLLM(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_path = kwargs.get('checkpoint_path')
+        if self.model_path is None:
+            raise ValueError("PointLLM requires checkpoint_path")
+        
+        self.conv_mode = kwargs.get('conv_mode', 'vicuna_v1_1')
+        self.temperature = kwargs.get('temperature', 0.2)
+        self.top_p = kwargs.get('top_p', None)
+        self.num_beams = kwargs.get('num_beams', 1)
+        self.max_new_tokens = kwargs.get('max_new_tokens', 512)
+
+        from models.dependence.pointllm.model import PointLLMLlamaForCausalLM  
+        from models.dependence.pointllm.conversation import conv_templates 
+        from models.dependence.pointllm.utils import disable_torch_init  
+        from models.dependence.pointllm.data import pc_norm 
+        from transformers import AutoTokenizer
+
+        self.conv_templates = conv_templates
+        self.pc_norm = pc_norm
+        
+        disable_torch_init()
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+        self.model = PointLLMLlamaForCausalLM.from_pretrained(self.model_path).to(self.device)
+        self.model.eval()
+        self.model.initialize_tokenizer_point_backbone_config(self.tokenizer, device=self.device, fix_llm=True)
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, torch.Tensor):
+            pc = pc.cpu().numpy()
+        
+        pc = self.pc_norm(pc)
+        return torch.from_numpy(pc).float().to(self.device)
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for PointLLM evaluation')
+
+        conv = self.conv_templates[self.conv_mode].copy()
+        conv.append_message(conv.roles[0], prompt)
+        conv.append_message(conv.roles[1], None)
+        prompt_text = conv.get_prompt()
+
+        input_ids = self.tokenizer(prompt_text, return_tensors='pt').input_ids.to(self.device)
+        point_tensor = self._prepare_point_cloud(point_cloud)
+
+        with torch.inference_mode():
+            output_ids = self.model.generate(
+                input_ids,
+                point_clouds=point_tensor.unsqueeze(0),
+                do_sample=self.temperature > 0 and self.num_beams == 1,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                num_beams=self.num_beams,
+                max_new_tokens=self.max_new_tokens,
+                use_cache=True
+            )
+
+        response = self.tokenizer.decode(
+            output_ids[0][input_ids.shape[1]:], 
+            skip_special_tokens=True
+        ).strip()
+
+        return response
 
 
 

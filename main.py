@@ -35,7 +35,12 @@ def run_eval(
         except Exception as e:
             raise ValueError(f"choices参数解析失败: {choices}") from e
 
-    prompt_func = None
+    def default_prompt_func(q, opts=None):
+        if opts:
+            return f"{q}\n{chr(10).join(opts)}\n\nAnswer with the option's letter from the given choices directly."
+        return q
+
+    prompt_func = default_prompt_func
     if prompt_template:
         def prompt_func(q, opts=None):
             if opts:

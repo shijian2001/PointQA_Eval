@@ -1,4 +1,4 @@
-from llava.pc_utils.registry import Registry
+from ....pc_utils.registry import Registry
 
 MODELS = Registry("models")
 

@@ -1,13 +1,12 @@
-import datetime
 import logging
 import logging.handlers
 import os
 import sys
-import importlib.util
 
 import requests
 
-from .constants import LOGDIR
+import yaml
+from easydict import EasyDict
 
 server_error_msg = "**NETWORK ERROR DUE TO HIGH TRAFFIC. PLEASE REGENERATE OR REFRESH THIS PAGE.**"
 moderation_msg = "YOUR INPUT VIOLATES OUR CONTENT MODERATION GUIDELINES. PLEASE TRY AGAIN."
@@ -15,11 +14,38 @@ moderation_msg = "YOUR INPUT VIOLATES OUR CONTENT MODERATION GUIDELINES. PLEASE 
 handler = None
 
 
-def build_logger(logger_name, logger_filename):
+def merge_new_config(config, new_config):
+    for key, val in new_config.items():
+        if not isinstance(val, dict):
+            if key == '_base_':
+                with open(new_config['_base_'], 'r') as f:
+                    try:
+                        val = yaml.load(f, Loader=yaml.FullLoader)
+                    except:
+                        val = yaml.load(f)
+                config[key] = EasyDict()
+                merge_new_config(config[key], val)
+            else:
+                config[key] = val
+                continue
+        if key not in config:
+            config[key] = EasyDict()
+        merge_new_config(config[key], val)
+    return config
+
+def cfg_from_yaml_file(cfg_file):
+    config = EasyDict()
+    with open(cfg_file, 'r') as f:
+        new_config = yaml.load(f, Loader=yaml.FullLoader)
+    merge_new_config(config=config, new_config=new_config)
+    return config
+
+
+def build_logger(logger_name, logger_filepath):
     global handler
 
     formatter = logging.Formatter(
-        fmt="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+        fmt="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
@@ -45,10 +71,11 @@ def build_logger(logger_name, logger_filename):
 
     # Add a file handler for all loggers
     if handler is None:
-        os.makedirs(LOGDIR, exist_ok=True)
-        filename = os.path.join(LOGDIR, logger_filename)
+        # * get the logger_file's directory, and create it if not exist
+        logger_filedir = os.path.dirname(logger_filepath)
+        os.makedirs(logger_filedir, exist_ok=True)
         handler = logging.handlers.TimedRotatingFileHandler(
-            filename, when='D', utc=True, encoding='UTF-8')
+            logger_filepath, when='D', utc=True)
         handler.setFormatter(formatter)
 
         for name, item in logging.root.manager.loggerDict.items():
@@ -125,15 +152,3 @@ def pretty_print_semaphore(semaphore):
     if semaphore is None:
         return "None"
     return f"Semaphore(value={semaphore._value}, locked={semaphore.locked()})"
-
-
-def load_config(path):
-    spec = importlib.util.spec_from_file_location("config", path)
-    
-    config = importlib.util.module_from_spec(spec)
-    
-    sys.modules["config"] = config
-    
-    spec.loader.exec_module(config)
-    
-    return config

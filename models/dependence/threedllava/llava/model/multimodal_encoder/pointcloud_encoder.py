@@ -6,7 +6,7 @@ from .custom_spconv_module.spconv_layers import SubMConv3d
 from .custom_spconv_module.batchnorm import BatchNorm1d
 import spconv.pytorch as spconv
 import pathlib
-from llava.utils import load_config
+from ...utils import load_config
 from .ost_module import build_model, build_criteria
 import copy
 
