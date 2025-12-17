@@ -7,11 +7,13 @@ from typing import Dict, List, Any, Callable, Union, Sequence, Mapping
 from collections import OrderedDict
 
 from .base_qa_model import QAModel, QAModelInstance, load_point_cloud
+from .dependence.utils.threedllava_utils import ponder_collate_fn
 
 point_qa_models = {
     "3dllava": ("ThreeDLLava"),
     "shapellm": ("ShapeLLM"),
     "pointllm": ("PointLLM"),
+    "minigpt3d": ("MiniGPT3D"),
 }
 
 def list_point_qa_models() -> List[str]:
@@ -377,6 +379,90 @@ class PointLLM(QAModelInstance):
 
         return response
 
+
+class MiniGPT3D(QAModelInstance):
+    def __init__(self, **kwargs):
+        from models.dependence.minigpt3d.common.registry import registry
+        registry.register_path(
+            "library_root",
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "dependence", "minigpt3d"))
+        )
+        
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.cfg_path = kwargs.get('cfg_path')
+        if self.cfg_path is None:
+            raise ValueError("MiniGPT-3D requires --cfg_path pointing to the config yaml file")
+        
+        self.max_new_tokens = kwargs.get('max_new_tokens', 150)
+        self.min_length = kwargs.get('min_length', 10)
+        self.num_beams = kwargs.get('num_beams', 2)
+        self.top_p = kwargs.get('top_p', 0.7)
+        self.repetition_penalty = kwargs.get('repetition_penalty', 1.0)
+        self.length_penalty = kwargs.get('length_penalty', 1.0)
+        self.temperature = kwargs.get('temperature', 0.2)
+        self.do_sample = kwargs.get('do_sample', True)
+
+        try:
+            from models.dependence.minigpt3d.common.eval_utils import init_model, prepare_texts
+            from models.dependence.minigpt3d.conversation.conversation import CONV_VISION
+            
+            self.prepare_texts = prepare_texts
+            self.conv_temp = CONV_VISION.copy()
+            self.conv_temp.system = ""
+        except ImportError as exc:
+            raise ImportError(
+                "MiniGPT-3D dependencies missing. Please ensure 'minigpt3d' package is available in models.dependence."
+            ) from exc
+
+        gpu_id = 0
+        if isinstance(self.device, str) and self.device.startswith('cuda'):
+            if ':' in self.device:
+                gpu_id = int(self.device.split(':')[1])
+        
+        class Args:
+            def __init__(self, cfg_path, gpu_id):
+                self.cfg_path = cfg_path
+                self.gpu_id = gpu_id
+                self.options = None
+        
+        args = Args(self.cfg_path, gpu_id)
+        self.model = init_model(args)
+        self.model.eval()
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, torch.Tensor):
+            pc = pc.cpu().numpy()
+        
+        return torch.from_numpy(pc).float().unsqueeze(0).to(self.device)
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for MiniGPT-3D evaluation')
+
+        point_tensor = self._prepare_point_cloud(point_cloud)
+        texts = self.prepare_texts([prompt], self.conv_temp)
+
+        with torch.inference_mode():
+            answers = self.model.generate(
+                point_tensor,
+                texts,
+                num_beams=self.num_beams,
+                max_new_tokens=self.max_new_tokens,
+                min_length=self.min_length,
+                top_p=self.top_p,
+                repetition_penalty=self.repetition_penalty,
+                length_penalty=self.length_penalty,
+                temperature=self.temperature,
+                do_sample=self.do_sample
+            )
+
+        answer = answers[0].lower().replace('<unk>', '').strip()
+        answer = answer.split('###')[0]
+        answer = answer.split('Assistant:')[-1].strip()
+        
+        return answer
 
 
 def create_point_qa_model(model_name: str, checkpoint_path: str = None, **kwargs) -> PointQAModel:

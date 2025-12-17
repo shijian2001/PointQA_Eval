@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=6
 export HF_ENDPOINT=https://hf-mirror.com
 
 # 3D-LLaVA
@@ -22,10 +22,19 @@ export HF_ENDPOINT=https://hf-mirror.com
 #   --device cuda
 
 # PointLLM
-python main.py \
-  --model_name pointllm \
+# python main.py \
+#   --model_name pointllm \
+#   --tasks_file ./what_distance_farthest/tasks.jsonl \
+#   --point_cloud_dir ./what_distance_farthest/pcd \
+#   --checkpoint_path /home/wangxingjian/model/PointLLM_7B_v1.2 \
+#   --output_dir ./eval_results/pointllm \
+#   --device cuda
+
+# MiniGPT-3D
+python /home/wangxingjian/PointQA_Eval/main.py \
+  --model_name minigpt3d \
   --tasks_file ./what_distance_farthest/tasks.jsonl \
   --point_cloud_dir ./what_distance_farthest/pcd \
-  --checkpoint_path /home/wangxingjian/model/PointLLM_7B_v1.2 \
-  --output_dir ./eval_results/pointllm \
+  --cfg_path /home/wangxingjian/PointQA_Eval/models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml \
+  --output_dir ./eval_results/minigpt3d \
   --device cuda

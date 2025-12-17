@@ -19,10 +19,11 @@ def run_eval(
     prompt_template: str = None,
     output_dir: str = None,
     device: str = 'cuda',
+    cfg_path: str = None,
     **kwargs
 ):
     real_ckpt = checkpoint_path or test_ckpt
-    if not real_ckpt:
+    if model_name != 'minigpt3d' and not real_ckpt:
         raise ValueError("必须提供 checkpoint_path 或 test_ckpt")
 
     choices_list = None
@@ -46,6 +47,10 @@ def run_eval(
             if opts:
                 return prompt_template.format(question=q, choices=" ".join(opts))
             return prompt_template.format(question=q)
+
+    kwargs = dict(kwargs)
+    if cfg_path is not None:
+        kwargs.setdefault('cfg_path', cfg_path)
 
     model = PointQAModel(
         model_name=model_name,
