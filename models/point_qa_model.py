@@ -7,7 +7,6 @@ from typing import Dict, List, Any, Callable, Union, Sequence, Mapping
 from collections import OrderedDict
 
 from .base_qa_model import QAModel, QAModelInstance, load_point_cloud
-from .dependence.utils import ponder_collate_fn
 
 point_qa_models = {
     "3dllava": ("ThreeDLLava"),
@@ -108,11 +107,9 @@ class ThreeDLLava(QAModelInstance):
         self.model = self.model.to(self.device)
         self.model.eval()
 
-        # Use official transform pipeline
         self.transform = Compose(vqa_transform_eval)
 
     def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> Dict[str, Any]:
-        """Prepare point cloud dict compatible with 3D-LLaVA pipeline."""
         pc = load_point_cloud(point_cloud)
         if isinstance(pc, torch.Tensor):
             pc = pc.cpu().numpy()
@@ -136,7 +133,6 @@ class ThreeDLLava(QAModelInstance):
         pc_dict = self.transform(pc_dict)
         pc_dict['condition'] = 'textgen'
 
-        # Ensure tensors
         for key in ['coord', 'grid_coord', 'feat', 'offset']:
             if key in pc_dict and not torch.is_tensor(pc_dict[key]):
                 pc_dict[key] = torch.tensor(pc_dict[key])
@@ -157,7 +153,7 @@ class ThreeDLLava(QAModelInstance):
         pc_data['grid_coord'] = grid_coords
 
         try:
-            from pointgroup_ops import voxelization_idx  # type: ignore
+            from pointgroup_ops import voxelization_idx 
         except ImportError as exc:
             raise ImportError(
                 "pointgroup_ops is required for 3D-LLaVA evaluation."
