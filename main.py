@@ -23,7 +23,7 @@ def run_eval(
     **kwargs
 ):
     real_ckpt = checkpoint_path or test_ckpt
-    if model_name != 'minigpt3d' and not real_ckpt:
+    if model_name not in ['minigpt3d', 'greenplm'] and not real_ckpt:
         raise ValueError("必须提供 checkpoint_path 或 test_ckpt")
 
     choices_list = None
@@ -85,6 +85,8 @@ def run_eval(
                 'point_cloud_path': pc_path
             }
             if choices_task:
+                data['options'] = choices_task
+            if choices_task:
                 res = model.multiple_choice_qa(data, q, choices_task, answer=ans)
             else:
                 res = model.qa(data, q)
@@ -111,6 +113,8 @@ def run_eval(
             data['point_cloud'] = point_cloud
         else:
             raise ValueError("单个评测模式下必须提供 --point_cloud 或 --point_cloud_path")
+        if choices_list:
+            data['options'] = choices_list
         if choices_list:
             result = model.multiple_choice_qa(
                 data,

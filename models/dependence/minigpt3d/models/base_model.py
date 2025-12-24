@@ -142,8 +142,7 @@ class BaseModel(nn.Module):
 
         from .pointbert.point_encoder import PointTransformer
 
-        point_bert_config_addr = os.path.join(os.path.dirname(__file__),
-                                              "pointbert/PointTransformer_8192point_2layer.yaml")
+        point_bert_config_addr = os.path.join(os.path.dirname(__file__),"pointbert/PointTransformer_8192point_2layer.yaml")
         point_bert_config = cfg_from_yaml_file(point_bert_config_addr)
 
         # use color

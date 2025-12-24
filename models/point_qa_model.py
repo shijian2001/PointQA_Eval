@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import torch
 import argparse
 import numpy as np
@@ -14,6 +15,8 @@ point_qa_models = {
     "shapellm": ("ShapeLLM"),
     "pointllm": ("PointLLM"),
     "minigpt3d": ("MiniGPT3D"),
+    "pointbind": ("PointBind"),
+    "greenplm": ("GreenPLM"),
 }
 
 def list_point_qa_models() -> List[str]:
@@ -461,6 +464,218 @@ class MiniGPT3D(QAModelInstance):
         answer = answers[0].lower().replace('<unk>', '').strip()
         answer = answer.split('###')[0]
         answer = answer.split('Assistant:')[-1].strip()
+        
+        return answer
+
+
+
+class PointBind(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_path = kwargs.get('checkpoint_path')
+        if self.model_path is None:
+            raise ValueError("PointBind requires checkpoint_path")
+
+        self.model_arch = kwargs.get('model_arch', 'PointBind_I2PMAE')
+        self.bpe_path = kwargs.get('bpe_path', 'bpe/bpe_simple_vocab_16e6.txt.gz')
+
+        try:
+            from models.dependence.pointbind.imagebind.imagebind_model import ModalityType
+            from models.dependence.pointbind.utils.data_transform import load_and_transform_text
+            import models.dependence.pointbind.models.PointBind_models as pointbind_models
+        except ImportError as exc:
+            raise ImportError(
+                "PointBind dependencies missing. Please place the original Point-Bind code under models/dependence/pointbind."
+            ) from exc
+
+        self.ModalityType = ModalityType
+        self.load_and_transform_text = load_and_transform_text
+
+        ModelClass = getattr(pointbind_models, self.model_arch)
+        state_dict = torch.load(self.model_path, map_location='cpu')
+        self.model = ModelClass()
+        self.model.load_state_dict(state_dict, strict=True)
+        self.model = self.model.to(self.device)
+        self.model.eval()
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for PointBind evaluation')
+
+        choices = data.get('options')
+        if not choices:
+            lines = [line.strip() for line in prompt.splitlines() if line.strip()]
+            choices = lines[1:] if len(lines) > 1 else []
+        if not choices:
+            raise ValueError('Choices are required for PointBind evaluation')
+
+        pc = load_point_cloud(point_cloud)
+        pc_tensor = torch.as_tensor(pc, dtype=torch.float32)
+        if pc_tensor.ndim == 2:
+            pc_tensor = pc_tensor.unsqueeze(0)
+        pc_tensor = pc_tensor.to(self.device)
+
+        text_inputs = {
+            self.ModalityType.TEXT: self.load_and_transform_text(choices, self.device),
+        }
+
+        with torch.inference_mode():
+            text_features = self.model.bind(text_inputs)[self.ModalityType.TEXT]
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+            pc_features = self.model.encode_pc(pc_tensor)
+            pc_features = self.model.bind.modality_head_point(pc_features)
+            pc_features = self.model.bind.modality_postprocessor_point(pc_features)
+            pc_features = pc_features / pc_features.norm(dim=-1, keepdim=True)
+
+            logits = pc_features @ text_features.t()
+
+        if logits.ndim == 2:
+            pred_idx = logits.argmax(dim=-1)[0].item()
+        else:
+            pred_idx = logits.argmax().item()
+
+        return choices[pred_idx]
+
+
+class GreenPLM(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_path = kwargs.get('model_path', './lava-vicuna_2024_4_Phi-3-mini-4k-instruct')
+        self.lora_path = kwargs.get('lora_path')
+        self.pretrain_mm_mlp_adapter = kwargs.get('pretrain_mm_mlp_adapter')
+        self.pc_ckpt_path = kwargs.get('pc_ckpt_path')
+        self.pc_encoder_type = kwargs.get('pc_encoder_type', 'small')
+        self.get_pc_tokens_way = kwargs.get('get_pc_tokens_way', 'OM_Pooling')
+        self.std = kwargs.get('std', 0.0)
+
+        if self.pretrain_mm_mlp_adapter is None:
+            raise ValueError("GreenPLM requires pretrain_mm_mlp_adapter")
+        if self.pc_ckpt_path is None:
+            raise ValueError("GreenPLM requires pc_ckpt_path")
+
+        self.temperature = kwargs.get('temperature', 0.1)
+        self.top_p = kwargs.get('top_p', 0.1)
+        self.num_beams = kwargs.get('num_beams', 1)
+        self.max_new_tokens = kwargs.get('max_new_tokens', 50)
+        self.min_new_tokens = kwargs.get('min_new_tokens', 0)
+        self.repetition_penalty = kwargs.get('repetition_penalty', 1.0)
+
+        from models.dependence.greenplm.llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN
+        from models.dependence.greenplm.llava.conversation import conv_templates
+        from models.dependence.greenplm.llava.model.builder import load_pretrained_model
+        from models.dependence.greenplm.llava.mm_utils import tokenizer_image_token, get_model_name_from_path
+
+        self.IMAGE_TOKEN_INDEX = IMAGE_TOKEN_INDEX
+        self.DEFAULT_IMAGE_TOKEN = DEFAULT_IMAGE_TOKEN
+        self.conv_templates = conv_templates
+        self.tokenizer_image_token = tokenizer_image_token
+
+        model_name = get_model_name_from_path(self.model_path)
+        if 'llava' not in model_name.lower():
+            model_name = f"llava-{model_name}"
+        self.tokenizer, self.model, self.context_len = load_pretrained_model(
+            self.model_path,
+            None,
+            model_name,
+            device_map={"": self.device},
+            device=self.device,
+        )
+
+        class ModelArgs:
+            def __init__(self, **kw):
+                for k, v in kw.items():
+                    setattr(self, k, v)
+
+        model_args = ModelArgs(
+            vision_tower=None,
+            pretrain_mm_mlp_adapter=self.pretrain_mm_mlp_adapter,
+            encoder_type='pc_encoder',
+            std=self.std,
+            pc_encoder_type=self.pc_encoder_type,
+            pc_feat_dim=192,
+            embed_dim=1024,
+            group_size=64,
+            num_group=512,
+            pc_encoder_dim=512,
+            patch_dropout=0.0,
+            pc_ckpt_path=self.pc_ckpt_path,
+            lora_path=self.lora_path,
+            model_path=self.model_path,
+            get_pc_tokens_way=self.get_pc_tokens_way
+        )
+
+        base_model = self.model
+        target = base_model.get_model() if hasattr(base_model, 'get_model') else base_model
+        target.initialize_other_modules(model_args)
+
+        if self.lora_path:
+            from peft import PeftModel
+            self.model = PeftModel.from_pretrained(
+                base_model,
+                self.lora_path,
+                device_map={"": self.device},
+                torch_dtype=torch.bfloat16,
+                offload_folder=None,
+                offload_state_dict=False,
+            )
+        else:
+            self.model = base_model
+
+        # dtype/device
+        target = base_model.get_model() if hasattr(base_model, 'get_model') else base_model
+        target.to(dtype=torch.bfloat16)
+        if hasattr(target, 'vision_tower'):
+            target.vision_tower.to(dtype=torch.float)
+        self.model.to(self.device)
+        self.model.eval()
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, torch.Tensor):
+            pc = pc.cpu().numpy()
+        
+        if pc.shape[1] == 3:
+            colors = np.zeros_like(pc, dtype=np.float32)
+            pc = np.concatenate([pc, colors], axis=1)
+        
+        return torch.from_numpy(pc).float()
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for GreenPLM evaluation')
+
+        qs = self.DEFAULT_IMAGE_TOKEN + "\n" + prompt
+        conv_mode = "phi3_instruct"
+        conv = self.conv_templates[conv_mode].copy()
+        conv.append_message(conv.roles[0], qs)
+        conv.append_message(conv.roles[1], None)
+        qs = conv.get_prompt()
+
+        input_ids = self.tokenizer_image_token(
+            qs, self.tokenizer, self.IMAGE_TOKEN_INDEX, return_tensors="pt"
+        ).unsqueeze(0).to(self.device)
+
+        point_tensor = self._prepare_point_cloud(point_cloud).unsqueeze(0).to(self.device, dtype=torch.bfloat16)
+
+        with torch.inference_mode():
+            output_ids = self.model.generate(
+                input_ids,
+                images=point_tensor,
+                do_sample=True if self.temperature > 0 and self.num_beams == 1 else False,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                num_beams=self.num_beams,
+                max_new_tokens=self.max_new_tokens,
+                min_new_tokens=self.min_new_tokens,
+                use_cache=True,
+                repetition_penalty=self.repetition_penalty,
+            )
+
+        answer = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+        answer = answer.replace("<|end|>", "").strip()
         
         return answer
 
