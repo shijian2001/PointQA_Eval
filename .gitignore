@@ -9,6 +9,7 @@ cache/
 attention_data/
 results/
 res/
+.vscode/
 cankao/
 3D-R1/
 checkpoint/
