@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=7
 export HF_ENDPOINT=https://hf-mirror.com
 
 # 3D-LLaVA
@@ -12,14 +12,14 @@ export HF_ENDPOINT=https://hf-mirror.com
 #   --device cuda
 
 # ShapeLLM
-python main.py \
-  --model_name shapellm \
-  --tasks_file ./what_distance_farthest/tasks.jsonl \
-  --point_cloud_dir ./what_distance_farthest/pcd \
-  --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
-  --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
-  --output_dir ./eval_results/shapellm \
-  --device cuda
+# python main.py \
+#   --model_name shapellm \
+#   --tasks_file ./what_distance_farthest/tasks.jsonl \
+#   --point_cloud_dir ./what_distance_farthest/pcd \
+#   --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
+#   --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
+#   --output_dir ./eval_results/shapellm \
+#   --device cuda
 
 # PointLLM
 # python main.py \
@@ -53,15 +53,15 @@ python main.py \
 #   --device cuda
 
 # greenplm
-# python main.py \
-#   --model_name greenplm \
-#   --tasks_file ./what_distance_farthest/tasks.jsonl \
-#   --point_cloud_dir ./what_distance_farthest/pcd \
-#   --model_path /home/wangxingjian/PointQA_Eval/GreenPLM/lava-vicuna_2024_4_Phi-3-mini-4k-instruct \
-#   --lora_path /home/wangxingjian/PointQA_Eval/GreenPLM/release/paper/weight/stage_3 \
-#   --pretrain_mm_mlp_adapter /home/wangxingjian/PointQA_Eval/GreenPLM/release/paper/weight/stage_3/non_lora_trainables.bin \
-#   --pc_ckpt_path /home/wangxingjian/PointQA_Eval/GreenPLM/pretrained_weight/Uni3D_PC_encoder/modelzoo/uni3d-small/model.pt \
-#   --pc_encoder_type small \
-#   --get_pc_tokens_way OM_Pooling \
-#   --output_dir ./eval_results/greenplm \
-#   --device cuda
+python main.py \
+  --model_name greenplm \
+  --tasks_file ./what_distance_farthest/tasks.jsonl \
+  --point_cloud_dir ./what_distance_farthest/pcd \
+  --model_path /home/wangxingjian/PointQA_Eval/cankao/GreenPLM/lava-vicuna_2024_4_Phi-3-mini-4k-instruct \
+  --lora_path /home/wangxingjian/PointQA_Eval/cankao/GreenPLM/release/paper/weight/stage_3 \
+  --pretrain_mm_mlp_adapter /home/wangxingjian/PointQA_Eval/cankao/GreenPLM/release/paper/weight/stage_3/non_lora_trainables.bin \
+  --pc_ckpt_path /home/wangxingjian/PointQA_Eval/cankao/GreenPLM/pretrained_weight/Uni3D_PC_encoder/modelzoo/uni3d-small/model.pt \
+  --pc_encoder_type small \
+  --get_pc_tokens_way OM_Pooling \
+  --output_dir ./eval_results/greenplm \
+  --device cuda

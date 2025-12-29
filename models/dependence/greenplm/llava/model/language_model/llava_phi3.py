@@ -69,6 +69,7 @@ class LlavaPhiForCausalLM(Phi3ForCausalLM, LlavaMetaForCausalLM):
         images: Optional[torch.FloatTensor] = None,
         image_sizes: Optional[List[List[int]]] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,  # Accept additional kwargs from newer transformers versions
     ) -> Union[Tuple, CausalLMOutputWithPast]:
 
 
