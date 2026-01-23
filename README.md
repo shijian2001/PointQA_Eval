@@ -84,7 +84,7 @@ uv pip install -r requirements_minigpt3d.txt
 ```
 
 #### Update the model config
-1. Check this issue: [issue](https://github.com/TangYuan96/MiniGPT-3D/issues/6), move [MiniGPT-3D/modeling_phi](https://github.com/TangYuan96/MiniGPT-3D/blob/main/modeling_phi.py).py to model/phi /modeling_phi.py in the transformers library.
+1. Check this issue: [issue](https://github.com/TangYuan96/MiniGPT-3D/issues/6), move [MiniGPT-3D/modeling_phi.py](https://github.com/TangYuan96/MiniGPT-3D/blob/main/modeling_phi.py) to model/phi /modeling_phi.py in the transformers library.
 2. Modify the model path in benchmark config file: [benchmark_evaluation_paper.yaml](models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml)
 
 #### Modify the model path
