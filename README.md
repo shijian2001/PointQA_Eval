@@ -103,6 +103,5 @@ Change the tokenizer path to your real path.
 ## Quick Start
 
 ```bash
-# run eval
 bash run_eval.sh
 ```

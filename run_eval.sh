@@ -12,14 +12,14 @@ export HF_ENDPOINT=https://hf-mirror.com
 #   --device cuda
 
 # ShapeLLM
-# python main.py \
-#   --model_name shapellm \
-#   --tasks_file ./what_distance_farthest/tasks.jsonl \
-#   --point_cloud_dir ./what_distance_farthest/pcd \
-#   --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
-#   --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
-#   --output_dir ./eval_results/shapellm \
-#   --device cuda
+python main.py \
+  --model_name shapellm \
+  --tasks_file ./what_distance_farthest/tasks.jsonl \
+  --point_cloud_dir ./what_distance_farthest/pcd \
+  --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
+  --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
+  --output_dir ./eval_results/shapellm \
+  --device cuda
 
 # PointLLM
 # python main.py \
@@ -44,13 +44,13 @@ export HF_ENDPOINT=https://hf-mirror.com
 #   --min_length 1
 
 # MiniGPT-3D
-python /home/wangxingjian/PointQA_Eval/main.py \
-  --model_name minigpt3d \
-  --tasks_file ./what_distance_farthest/tasks.jsonl \
-  --point_cloud_dir ./what_distance_farthest/pcd \
-  --cfg_path /home/wangxingjian/PointQA_Eval/models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml \
-  --output_dir ./eval_results/minigpt3d \
-  --device cuda
+# python /home/wangxingjian/PointQA_Eval/main.py \
+#   --model_name minigpt3d \
+#   --tasks_file ./what_distance_farthest/tasks.jsonl \
+#   --point_cloud_dir ./what_distance_farthest/pcd \
+#   --cfg_path /home/wangxingjian/PointQA_Eval/models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml \
+#   --output_dir ./eval_results/minigpt3d \
+#   --device cuda
 
 # greenplm
 # python main.py \

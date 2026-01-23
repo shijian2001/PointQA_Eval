@@ -78,6 +78,7 @@ def run_eval(
             q = task['question']
             choices_task = task.get('options') or task.get('choices')
             ans = task.get('answer')
+            ans_id = task.get('answer_id')  # Get answer_id if available
             point_file = task.get('point') or task.get('point_cloud')
             pc_path = os.path.join(point_cloud_dir, point_file)
             data = {
@@ -87,7 +88,31 @@ def run_eval(
             if choices_task:
                 data['options'] = choices_task
             if choices_task:
-                res = model.multiple_choice_qa(data, q, choices_task, answer=ans)
+                answer_for_comparison = None
+                if ans is not None:
+                    if ans_id:
+                        for choice in choices_task:
+                            if choice.startswith(ans_id + ".") or choice.startswith(f"({ans_id})"):
+                                answer_for_comparison = choice
+                                break
+                    if answer_for_comparison is None:
+                        for choice in choices_task:
+                            if choice == ans:
+                                answer_for_comparison = choice
+                                break
+                            choice_text = choice
+                            for prefix_char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+                                if choice_text.startswith(prefix_char + ". "):
+                                    choice_text = choice_text[3:]
+                                    break
+                                elif choice_text.startswith(f"({prefix_char}) "):
+                                    choice_text = choice_text[4:]
+                                    break
+                            if choice_text == ans:
+                                answer_for_comparison = choice
+                                break
+                
+                res = model.multiple_choice_qa(data, q, choices_task, answer=answer_for_comparison)
             else:
                 res = model.qa(data, q)
                 res = {'free_form_answer': res}
