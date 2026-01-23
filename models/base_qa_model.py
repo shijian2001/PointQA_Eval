@@ -128,7 +128,7 @@ class QAModel(Model):
 		result = {
 			"free_form_answer"      : free_form_answer,
 			"multiple_choice_answer": multiple_choice_answer,
-			"choices"               : choices.copy(),
+			# "choices"               : choices.copy(),
 		}
 		if answer is not None:
 			result["accuracy"] = int(answer == multiple_choice_answer)

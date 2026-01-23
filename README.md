@@ -57,10 +57,7 @@ cd PointQA_Eval
 
 bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/greenplm
 source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/greenplm
-```
 
-#### Install packages
-```bash
 uv pip install -r requirements_greenplm.txt
 ```
 
@@ -74,6 +71,34 @@ cd Pointnet2_PyTorch/pointnet2_ops_lib
 uv pip install -e . --no-build-isolation
 ```
 
+### 4. MiniGPT3D
+
+#### Virtual environment
+```bash
+cd PointQA_Eval
+
+bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
+source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
+
+uv pip install -r requirements_minigpt3d.txt
+```
+
+#### Update the model config
+1. Check this issue: [issue](https://github.com/TangYuan96/MiniGPT-3D/issues/6), move [MiniGPT-3D/modeling_phi](https://github.com/TangYuan96/MiniGPT-3D/blob/main/modeling_phi.py).py to model/phi /modeling_phi.py in the transformers library.
+2. Modify the model path in benchmark config file: [benchmark_evaluation_paper.yaml](models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml)
+
+#### Modify the model path
+
+The files to be modified:
+- [conversation.py](models/dependence/minigpt3d/minigpt4/conversation/conversation.py) line 20
+- [base_model.py](models/dependence/minigpt3d/minigpt4/models/base_model.py) line 55
+
+In both files, change the tokenizer loading line to:
+```python
+tokenizer = AutoTokenizer.from_pretrained("model/MiniGPT-3D/params_weight/Phi_2")
+```
+
+Change the tokenizer path to your real path.
 
 ## Quick Start
 

@@ -385,11 +385,9 @@ class PointLLM(QAModelInstance):
 
 class MiniGPT3D(QAModelInstance):
     def __init__(self, **kwargs):
-        from models.dependence.minigpt3d.common.registry import registry
-        registry.register_path(
-            "library_root",
-            os.path.abspath(os.path.join(os.path.dirname(__file__), "dependence", "minigpt3d"))
-        )
+        # CRITICAL: Import package root FIRST to establish sys.modules["minigpt4"] alias
+        # This must happen before ANY imports from minigpt4 submodules
+        import models.dependence.minigpt3d.minigpt4 as minigpt4_pkg
         
         self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
         self.cfg_path = kwargs.get('cfg_path')
@@ -405,17 +403,12 @@ class MiniGPT3D(QAModelInstance):
         self.temperature = kwargs.get('temperature', 0.2)
         self.do_sample = kwargs.get('do_sample', True)
 
-        try:
-            from models.dependence.minigpt3d.common.eval_utils import init_model, prepare_texts
-            from models.dependence.minigpt3d.conversation.conversation import CONV_VISION
-            
-            self.prepare_texts = prepare_texts
-            self.conv_temp = CONV_VISION.copy()
-            self.conv_temp.system = ""
-        except ImportError as exc:
-            raise ImportError(
-                "MiniGPT-3D dependencies missing. Please ensure 'minigpt3d' package is available in models.dependence."
-            ) from exc
+        from minigpt4.common.eval_utils import init_model, prepare_texts
+        from minigpt4.conversation.conversation import CONV_VISION
+        
+        self.prepare_texts = prepare_texts
+        self.conv_temp = CONV_VISION.copy()
+        # self.conv_temp.system = ""
 
         gpu_id = 0
         if isinstance(self.device, str) and self.device.startswith('cuda'):
@@ -472,71 +465,77 @@ class MiniGPT3D(QAModelInstance):
 class PointBind(QAModelInstance):
     def __init__(self, **kwargs):
         self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-        self.model_path = kwargs.get('checkpoint_path')
-        if self.model_path is None:
-            raise ValueError("PointBind requires checkpoint_path")
+        self.adapter_path = kwargs.get('checkpoint_path')
+        if self.adapter_path is None:
+            raise ValueError("PointBind requires checkpoint_path for the Point-LLM adapter")
 
-        self.model_arch = kwargs.get('model_arch', 'PointBind_I2PMAE')
-        self.bpe_path = kwargs.get('bpe_path', 'bpe/bpe_simple_vocab_16e6.txt.gz')
+        self.llama_dir = kwargs.get('llama_dir') or kwargs.get('pointbind_llama_dir')
+        if self.llama_dir is None:
+            raise ValueError("PointBind requires llama_dir to load LLaMA weights")
 
-        try:
-            from models.dependence.pointbind.imagebind.imagebind_model import ModalityType
-            from models.dependence.pointbind.utils.data_transform import load_and_transform_text
-            import models.dependence.pointbind.models.PointBind_models as pointbind_models
-        except ImportError as exc:
-            raise ImportError(
-                "PointBind dependencies missing. Please place the original Point-Bind code under models/dependence/pointbind."
-            ) from exc
+        self.llama_type = kwargs.get('llama_type', '7B')
+        self.llama_knn = kwargs.get('llama_knn', False)
+        self.cache_size = kwargs.get('cache_size', 10)
+        self.cache_t = kwargs.get('cache_t', 20)
+        self.cache_weight = kwargs.get('cache_weight', 0.5)
+        self.max_new_tokens = kwargs.get('max_new_tokens', 256)
+        self.temperature = kwargs.get('temperature', 0.1)
+        self.top_p = kwargs.get('top_p', 0.75)
 
-        self.ModalityType = ModalityType
-        self.load_and_transform_text = load_and_transform_text
+        # Optional i2pmae path for users who keep the pretrained checkpoints separate.
+        # Exposed for CLI parity; not used directly by the Point-LLM adapter but kept for clarity.
+        self.i2pmae_ckpt = kwargs.get('i2pmae_ckpt') or kwargs.get('i2pmae_path')
 
-        ModelClass = getattr(pointbind_models, self.model_arch)
-        state_dict = torch.load(self.model_path, map_location='cpu')
-        self.model = ModelClass()
-        self.model.load_state_dict(state_dict, strict=True)
-        self.model = self.model.to(self.device)
+        from models.dependence.pointbind.ImageBind import data as imagebind_data  # type: ignore
+        from models.dependence.pointbind.llama import load as llama_load, format_prompt  # type: ignore
+
+        self.imagebind_data = imagebind_data
+        self.format_prompt = format_prompt
+
+        # Load the Point-LLM (LLaMA adapter)
+        self.model = llama_load(
+            self.adapter_path,
+            self.llama_dir,
+            device=self.device,
+            knn=self.llama_knn,
+            llama_type=self.llama_type,
+        )
         self.model.eval()
+
+    def _prepare_point_inputs(self, point_cloud: Union[np.ndarray, torch.Tensor, str]):
+        """Convert various point cloud inputs into Point-Bind expected format."""
+        if isinstance(point_cloud, str):
+            point_tensor = self.imagebind_data.load_and_transform_point_cloud_data([point_cloud], device=self.device)
+        else:
+            pc = load_point_cloud(point_cloud)
+            pc_tensor = torch.as_tensor(pc, dtype=torch.float32)
+            if pc_tensor.ndim == 2:
+                pc_tensor = pc_tensor.unsqueeze(0)
+            point_tensor = pc_tensor.to(self.device)
+
+        return {'Point': [point_tensor, 1]}
 
     def qa(self, data: Dict[str, Any], prompt: str) -> str:
         point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
         if point_cloud is None:
             raise ValueError('Point cloud is required for PointBind evaluation')
 
-        choices = data.get('options')
-        if not choices:
-            lines = [line.strip() for line in prompt.splitlines() if line.strip()]
-            choices = lines[1:] if len(lines) > 1 else []
-        if not choices:
-            raise ValueError('Choices are required for PointBind evaluation')
-
-        pc = load_point_cloud(point_cloud)
-        pc_tensor = torch.as_tensor(pc, dtype=torch.float32)
-        if pc_tensor.ndim == 2:
-            pc_tensor = pc_tensor.unsqueeze(0)
-        pc_tensor = pc_tensor.to(self.device)
-
-        text_inputs = {
-            self.ModalityType.TEXT: self.load_and_transform_text(choices, self.device),
-        }
+        inputs = self._prepare_point_inputs(point_cloud)
+        formatted_prompt = self.format_prompt(prompt)
 
         with torch.inference_mode():
-            text_features = self.model.bind(text_inputs)[self.ModalityType.TEXT]
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            outputs = self.model.generate(
+                inputs,
+                [formatted_prompt],
+                max_gen_len=self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                cache_size=self.cache_size,
+                cache_t=self.cache_t,
+                cache_weight=self.cache_weight,
+            )
 
-            pc_features = self.model.encode_pc(pc_tensor)
-            pc_features = self.model.bind.modality_head_point(pc_features)
-            pc_features = self.model.bind.modality_postprocessor_point(pc_features)
-            pc_features = pc_features / pc_features.norm(dim=-1, keepdim=True)
-
-            logits = pc_features @ text_features.t()
-
-        if logits.ndim == 2:
-            pred_idx = logits.argmax(dim=-1)[0].item()
-        else:
-            pred_idx = logits.argmax().item()
-
-        return choices[pred_idx]
+        return outputs[0].strip()
 
 
 class GreenPLM(QAModelInstance):
@@ -611,7 +610,7 @@ class GreenPLM(QAModelInstance):
         target.initialize_other_modules(model_args)
 
         if self.lora_path:
-            from peft import PeftModel
+            from peft import PeftModel  # type: ignore
             self.model = PeftModel.from_pretrained(
                 base_model,
                 self.lora_path,
