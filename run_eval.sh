@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 export HF_ENDPOINT=https://hf-mirror.com
 
 # 3D-LLaVA
@@ -12,14 +12,14 @@ export HF_ENDPOINT=https://hf-mirror.com
 #   --device cuda
 
 # ShapeLLM
-python main.py \
-  --model_name shapellm \
-  --tasks_file ./what_distance_farthest/tasks.jsonl \
-  --point_cloud_dir ./what_distance_farthest/pcd \
-  --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
-  --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
-  --output_dir ./eval_results/shapellm \
-  --device cuda
+# python main.py \
+#   --model_name shapellm \
+#   --tasks_file ./what_distance_farthest/tasks.jsonl \
+#   --point_cloud_dir ./what_distance_farthest/pcd \
+#   --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
+#   --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
+#   --output_dir ./eval_results/shapellm \
+#   --device cuda
 
 # PointLLM
 # python main.py \
@@ -31,17 +31,21 @@ python main.py \
 #   --device cuda
 
 # GPT4Point (OPT2.7B)
-# python main.py \
-#   --model_name gpt4point \
-#   --checkpoint_path /home/wangxingjian/model/GPT4Point/gpt4point_pretrain_stage2_opt2.7b.pth \
-#   --cfg_path models/dependence/gpt4point/lavis/projects/gpt4point/eval/pointqa_mcq_opt2.7b_eval.yaml \
-#   --tasks_file ./what_distance_farthest/tasks.jsonl \
-#   --point_cloud_dir ./what_distance_farthest/pcd \
-#   --output_dir ./eval_results/gpt4point \
-#   --device cuda \
-#   --num_beams 5 \
-#   --max_length 30 \
-#   --min_length 1
+python main.py \
+  --model_name gpt4point \
+  --checkpoint_path /home/wangxingjian/model/GPT4Point/gpt4point_pretrain_stage2_opt2.7b.pth \
+  --gpt4point_arch gpt4point_opt \
+  --gpt4point_type gpt4point_opt2.7b \
+  --gpt4point_point_encoder_ckpt /home/wangxingjian/model/GPT4Point/point_encoder_pointbert_wcolor.pth \
+  --gpt4point_bert_model /home/wangxingjian/model/bert-base-uncased \
+  --tasks_file ./what_distance_farthest/tasks.jsonl \
+  --point_cloud_dir ./what_distance_farthest/pcd \
+  --output_dir ./eval_results/gpt4point \
+  --device cuda \
+  --num_beams 5 \
+  --max_length 1024 \
+  --min_length 1 \
+  --repetition_penalty 1.5
 
 # MiniGPT-3D
 # python /home/wangxingjian/PointQA_Eval/main.py \

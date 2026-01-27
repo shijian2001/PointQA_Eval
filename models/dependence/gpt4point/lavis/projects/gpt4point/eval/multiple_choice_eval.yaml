@@ -1,0 +1,35 @@
+model:
+  arch: gpt4point_opt
+  model_type: gpt4point_opt2.7b
+  use_grad_checkpoint: False
+  load_finetuned: True
+  ckpt_special_strs: []
+
+datasets:
+  cap3d_multiple_choice:
+    text_processor:
+      eval:
+        name: "blip_caption"
+        prompt: "Answer the following question about the 3D point cloud: "
+    pts_processor:
+      eval:
+        name: "gpt4point_cap3d_eval"
+
+run:
+  task: multiple_choice3d
+  batch_size_eval: 16
+  num_workers: 4
+  max_len: 50
+  min_len: 1
+  num_beams: 1
+
+  seed: 42
+  output_dir: "output/GPT4Point/multiple_choice_eval"
+
+  evaluate: True
+  test_splits: ["test"]
+
+  device: "cuda"
+  world_size: 1
+  dist_url: "env://"
+  distributed: True

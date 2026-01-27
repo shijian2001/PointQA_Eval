@@ -23,7 +23,7 @@ def run_eval(
     **kwargs
 ):
     real_ckpt = checkpoint_path or test_ckpt
-    if model_name not in ['minigpt3d', 'greenplm'] and not real_ckpt:
+    if model_name not in ['minigpt3d', 'greenplm', 'gpt4point'] and not real_ckpt:
         raise ValueError("必须提供 checkpoint_path 或 test_ckpt")
 
     choices_list = None

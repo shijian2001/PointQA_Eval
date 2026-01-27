@@ -1,0 +1,14 @@
+# Copyright (c) 2026, pjlab.
+# All rights reserved.
+
+datasets:
+  cap3d_multiple_choice:
+    dataset_card: dataset_card/cap3d_multiple_choice.md
+    data_type: [points]
+    build_info:
+      annotations:
+        test:
+          url: local
+          storage: cap3d/annotations/cap3d_multiple_choice_test.json
+      points:
+        storage: cap3d/points/Cap3D_pcs_8192_xyz_w_color/

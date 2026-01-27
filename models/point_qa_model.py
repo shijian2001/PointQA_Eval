@@ -15,6 +15,7 @@ point_qa_models = {
     "shapellm": ("ShapeLLM"),
     "pointllm": ("PointLLM"),
     "minigpt3d": ("MiniGPT3D"),
+    "gpt4point": ("GPT4Point"),
     "pointbind": ("PointBind"),
     "greenplm": ("GreenPLM"),
 }
@@ -459,6 +460,108 @@ class MiniGPT3D(QAModelInstance):
         answer = answer.split('Assistant:')[-1].strip()
         
         return answer
+
+
+
+class GPT4Point(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.model_arch = kwargs.get('gpt4point_arch', 'gpt4point')
+        self.model_type = kwargs.get('gpt4point_type', 'gpt4point_opt2.7b')
+        self.gpt4point_ckpt = kwargs.get('checkpoint_path') or kwargs.get('gpt4point_ckpt')
+        self.point_encoder_ckpt = kwargs.get('gpt4point_point_encoder_ckpt')
+        self.opt_model_path = kwargs.get('gpt4point_opt_model')
+        self.bert_model_path = kwargs.get('gpt4point_bert_model')
+        self.max_length = kwargs.get('max_length', 1024)
+        self.min_length = kwargs.get('min_length', 1)
+        self.num_beams = kwargs.get('num_beams', 1)
+        self.top_p = kwargs.get('top_p', 0.9)
+        self.repetition_penalty = kwargs.get('repetition_penalty', 1.0)
+        self.length_penalty = kwargs.get('length_penalty', 1.0)
+        self.temperature = kwargs.get('temperature', 1.0)
+        self.do_sample = kwargs.get('do_sample', False)
+
+        # Import gpt4point package to trigger lavis aliasing
+        import models.dependence.gpt4point
+
+        from omegaconf import OmegaConf
+        from lavis.common.registry import registry
+        from lavis.models import load_preprocess
+        from lavis.processors.base_processor import BaseProcessor
+
+        if self.bert_model_path:
+            os.environ.setdefault("GPT4POINT_BERT_PATH", self.bert_model_path)
+        if self.point_encoder_ckpt:
+            os.environ.setdefault("GPT4POINT_POINT_ENCODER_CKPT", self.point_encoder_ckpt)
+
+        model_cls = registry.get_model_class(self.model_arch)
+        cfg_path = model_cls.default_config_path(self.model_type)
+        full_cfg = OmegaConf.load(cfg_path)
+        model_cfg = full_cfg.model
+
+        if self.gpt4point_ckpt:
+            model_cfg.load_finetuned = True
+            model_cfg.load_pretrained = False
+            model_cfg.finetuned = self.gpt4point_ckpt
+        if self.opt_model_path:
+            model_cfg.opt_model = self.opt_model_path
+        if self.point_encoder_ckpt:
+            model_cfg.point_encoder_cfg.checkpoint = self.point_encoder_ckpt
+
+        self.model = model_cls.from_config(model_cfg)
+        self.model.eval()
+        self.model.to(self.device)
+
+        preprocess_cfg = getattr(full_cfg, "preprocess", None)
+        if preprocess_cfg is not None:
+            pts_processors, _ = load_preprocess(preprocess_cfg)
+        else:
+            pts_processors = None
+        self.pts_processor = pts_processors.get("eval") if pts_processors else BaseProcessor()
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, torch.Tensor):
+            pc = pc.cpu().numpy()
+
+        if pc.shape[1] == 3:
+            white_color = np.array([1.0, 1.0, 1.0], dtype=np.float32)
+            white_colors = np.tile(white_color, (pc.shape[0], 1))
+            pc = np.concatenate((pc, white_colors), axis=1)
+
+        if self.pts_processor is not None:
+            pc = self.pts_processor(pc)
+
+        pc_tensor = torch.as_tensor(pc, dtype=torch.float32, device=self.device)
+        if pc_tensor.ndim == 2:
+            pc_tensor = pc_tensor.unsqueeze(0)
+        return pc_tensor
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for GPT4Point evaluation')
+
+        point_tensor = self._prepare_point_cloud(point_cloud)
+        samples = {
+            "point": point_tensor,
+            "text_input": [prompt],
+        }
+
+        with torch.inference_mode():
+            outputs = self.model.generate(
+                samples,
+                use_nucleus_sampling=self.do_sample,
+                num_beams=self.num_beams,
+                max_length=self.max_length,
+                min_length=self.min_length,
+                # top_p=self.top_p,
+                repetition_penalty=self.repetition_penalty,
+                length_penalty=self.length_penalty,
+                temperature=self.temperature,
+            )
+
+        return outputs[0].strip()
 
 
 

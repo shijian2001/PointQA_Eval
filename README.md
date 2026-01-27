@@ -100,6 +100,15 @@ tokenizer = AutoTokenizer.from_pretrained("model/MiniGPT-3D/params_weight/Phi_2"
 
 Change the tokenizer path to your real path.
 
+### 5. GPT4Point
+#### Virtual environment
+```bash
+cd PointQA_Eval
+uv venv ~/.virtualenvs/pointqa_eval/gpt4point --python 3.8
+source ~/.virtualenvs/pointqa_eval/gpt4point/bin/activate
+uv pip install -r requirements_gpt4point.txt
+```
+
 ## Quick Start
 
 ```bash
