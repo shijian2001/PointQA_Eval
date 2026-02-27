@@ -1,15 +1,7 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=6
 export HF_ENDPOINT=https://hf-mirror.com
+export SENTENCE_TRANSFORMERS_HOME=/home/wangxingjian/model/sentence_transformers
 
-# 3D-LLaVA
-# python main.py \
-#   --model_name 3dllava \
-#   --tasks_file ./what_distance_farthest/tasks.jsonl \
-#   --point_cloud_dir ./what_distance_farthest/pcd \
-#   --test_ckpt /home/wangxingjian/model/3D-LLaVA-7B-LoRA \
-#   --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
-#   --output_dir ./eval_results/3dllava \
-#   --device cuda
 
 # ShapeLLM
 # python main.py \
@@ -30,22 +22,18 @@ export HF_ENDPOINT=https://hf-mirror.com
 #   --output_dir ./eval_results/pointllm \
 #   --device cuda
 
-# GPT4Point (OPT2.7B)
+# OneLLM
 python main.py \
-  --model_name gpt4point \
-  --checkpoint_path /home/wangxingjian/model/GPT4Point/gpt4point_pretrain_stage2_opt2.7b.pth \
-  --gpt4point_arch gpt4point_opt \
-  --gpt4point_type gpt4point_opt2.7b \
-  --gpt4point_point_encoder_ckpt /home/wangxingjian/model/GPT4Point/point_encoder_pointbert_wcolor.pth \
-  --gpt4point_bert_model /home/wangxingjian/model/bert-base-uncased \
+  --model_name onellm \
   --tasks_file ./what_distance_farthest/tasks.jsonl \
   --point_cloud_dir ./what_distance_farthest/pcd \
-  --output_dir ./eval_results/gpt4point \
-  --device cuda \
-  --num_beams 5 \
-  --max_length 1024 \
-  --min_length 1 \
-  --repetition_penalty 1.5
+  --checkpoint_path /home/wangxingjian/model/OneLLM-7B/consolidated.00-of-01.pth \
+  --clip_pretrained_path /home/wangxingjian/model/vit_large_patch14_clip_224/open_clip_pytorch_model.bin \
+  --point_format xyzrgb \
+  --offline True \
+  --output_dir ./eval_results/onellm \
+  --device cuda
+
 
 # MiniGPT-3D
 # python /home/wangxingjian/PointQA_Eval/main.py \
@@ -70,13 +58,13 @@ python main.py \
 #   --output_dir ./eval_results/greenplm \
 #   --device cuda
 
-# Point-Bind Point-LLM (use PointBind slot)
-# python main.py \
-#   --model_name pointbind \
-#   --checkpoint_path ./models/pointbind_i2pmae.pt \  
-#   --llama_dir /path/to/LLaMA \                       
-#   --llama_type 7B \                                  
+# 3D-R1 (official detector + captioner, adapted to tasks.jsonl)
+# python3 main.py \
+#   --model_name 3dr1 \
+#   --checkpoint_path /home/wangxingjian/model/3dr1/checkpoint_rl.pth \
+#   --vocab /home/wangxingjian/model/Qwen2.5-7B \
+#   --qformer_vocab /home/wangxingjian/model/bert-base-uncased \
 #   --tasks_file ./what_distance_farthest/tasks.jsonl \
 #   --point_cloud_dir ./what_distance_farthest/pcd \
-#   --output_dir ./eval_results/pointbind_pointllm \
+#   --output_dir ./eval_results/3dr1 \
 #   --device cuda

@@ -100,14 +100,22 @@ tokenizer = AutoTokenizer.from_pretrained("model/MiniGPT-3D/params_weight/Phi_2"
 
 Change the tokenizer path to your real path.
 
-### 5. GPT4Point
+### 5. OneLLM
 #### Virtual environment
 ```bash
 cd PointQA_Eval
-uv venv ~/.virtualenvs/pointqa_eval/gpt4point --python 3.8
-source ~/.virtualenvs/pointqa_eval/gpt4point/bin/activate
-uv pip install -r requirements_gpt4point.txt
+
+bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/onellm
+source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/onellm
+
+uv pip install -r requirements_onellm.txt
+
+# install pointnet2
+git clone https://github.com/csuhan/OneLLM.git
+cd OneLLM/model/lib/pointnet2
+python setup.py install
 ```
+
 
 ## Quick Start
 

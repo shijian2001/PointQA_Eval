@@ -1,6 +1,8 @@
 import os
 import sys
+import importlib
 import re
+from types import SimpleNamespace
 import torch
 import argparse
 import numpy as np
@@ -8,16 +10,14 @@ from typing import Dict, List, Any, Callable, Union, Sequence, Mapping
 from collections import OrderedDict
 
 from .base_qa_model import QAModel, QAModelInstance, load_point_cloud
-from .dependence.utils.threedllava_utils import ponder_collate_fn
 
 point_qa_models = {
-    "3dllava": ("ThreeDLLava"),
     "shapellm": ("ShapeLLM"),
     "pointllm": ("PointLLM"),
+    "onellm": ("OneLLM"),
     "minigpt3d": ("MiniGPT3D"),
-    "gpt4point": ("GPT4Point"),
-    "pointbind": ("PointBind"),
     "greenplm": ("GreenPLM"),
+    "3dr1": ("ThreeDR1"),
 }
 
 def list_point_qa_models() -> List[str]:
@@ -68,10 +68,16 @@ class PointQAModel(QAModel):
 
     @staticmethod
     def _default_prompt_func(question: str, options: List[str] = None) -> str:
-        if not options:
-            return question
-        options_text = "\n".join(options)
-        return f"{question}\n\n{options_text}\n\nPlease answer with the letter of the correct option."
+        if options:
+            options_text = "\n".join(options)
+            return (
+                "Answer the question based on the provided point cloud.\n"
+                f"Question: {question}\n"
+                f"{options_text}\n"
+                "Output only the answer option."
+                # "Can you see the point cloud?"
+            )
+        return f"Answer the question based on the provided point cloud.\nQuestion: {question}\nOutput only the answer."
 
     def _data_to_str(self, data: Dict[str, Any]) -> str:
         if 'point_cloud_path' in data:
@@ -80,144 +86,6 @@ class PointQAModel(QAModel):
             pc = load_point_cloud(data['point_cloud'])
             return str(hash(pc.tobytes()))
         return "unknown"
-
-
-class ThreeDLLava(QAModelInstance):
-    def __init__(self, **kwargs):
-        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-        self.model_path = kwargs.get('checkpoint_path')
-        if self.model_path is None:
-            raise ValueError("3D-LLaVA requires --test_ckpt to point to the llava checkpoint path")
-        self.model_base = kwargs.get('llava_model_base') or kwargs.get('model_base')
-        self.pointcloud_tower_name = kwargs.get('llava_pointcloud_tower_name')
-        self.temperature = kwargs.get('llava_temperature', 1.0)
-        self.top_p = kwargs.get('llava_top_p', None)
-        self.num_beams = kwargs.get('llava_num_beams', 1)
-        self.max_new_tokens = kwargs.get('llava_max_new_tokens', 64)
-        self.conv_mode = kwargs.get('llava_conv_mode', 'vicuna_v1')
-
-        from models.dependence.threedllava.llava.model.builder import load_pretrained_model
-        from models.dependence.threedllava.llava.mm_utils import tokenizer_special_token, get_model_name_from_path
-        from models.dependence.threedllava.llava.utils import disable_torch_init
-        from models.dependence.threedllava.llava.pc_utils import vqa_transform_eval, Compose
-
-        disable_torch_init()
-        model_name = get_model_name_from_path(self.model_path)
-        self.tokenizer_special_token = tokenizer_special_token
-        self.tokenizer, self.model, _, _ = load_pretrained_model(
-            self.model_path,
-            self.model_base,
-            model_name,
-            pointcloud_tower_name=self.pointcloud_tower_name,
-        )
-        self.model = self.model.to(self.device)
-        self.model.eval()
-
-        self.transform = Compose(vqa_transform_eval)
-
-    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> Dict[str, Any]:
-        pc = load_point_cloud(point_cloud)
-        if isinstance(pc, torch.Tensor):
-            pc = pc.cpu().numpy()
-        if pc.ndim != 2 or pc.shape[1] < 3:
-            raise ValueError(f"Point cloud must be (N, 3+) shape for 3D-LLaVA, but got {pc.shape}")
-
-        coord = pc[:, :3].astype(np.float32)
-        if pc.shape[1] >= 6:
-            color = pc[:, 3:6].astype(np.float32)
-            if color.max() > 2.0:
-                color = color / 255.0
-        else:
-            color = np.zeros_like(coord, dtype=np.float32)
-
-        pc_dict = dict(
-            coord=coord,
-            color=color,
-            superpoint_mask=np.zeros(coord.shape[0], dtype=np.int64),
-        )
-
-        pc_dict = self.transform(pc_dict)
-        pc_dict['condition'] = 'textgen'
-
-        for key in ['coord', 'grid_coord', 'feat', 'offset']:
-            if key in pc_dict and not torch.is_tensor(pc_dict[key]):
-                pc_dict[key] = torch.tensor(pc_dict[key])
-        if not torch.is_tensor(pc_dict['superpoint_mask']):
-            pc_dict['superpoint_mask'] = torch.tensor(pc_dict['superpoint_mask'])
-
-        return pc_dict
-
-    def _prepare_generation_inputs(self, pc_data: Dict[str, Any]):
-        for key in ['coord', 'grid_coord', 'feat', 'offset']:
-            pc_data[key] = ponder_collate_fn([pc_data[key]])
-
-        grid_coords = pc_data['grid_coord']
-        grid_coords = torch.cat([
-            torch.zeros(grid_coords.shape[0], 1, dtype=grid_coords.dtype),
-            grid_coords
-        ], dim=1)
-        pc_data['grid_coord'] = grid_coords
-
-        try:
-            from pointgroup_ops import voxelization_idx 
-        except ImportError as exc:
-            raise ImportError(
-                "pointgroup_ops is required for 3D-LLaVA evaluation."
-            ) from exc
-
-        batch_size = 1
-        spatial_shape = np.clip((grid_coords.max(0)[0][1:] + 1).cpu().numpy(), 128, None)
-        voxel_coords, p2v_map, v2p_map = voxelization_idx(grid_coords, batch_size, 4)
-
-        return {
-            'coord': pc_data['coord'].to(self.device),
-            'grid_coord': voxel_coords.to(self.device),
-            'offset': pc_data['offset'].to(self.device),
-            'feat': pc_data['feat'].to(self.device),
-            'p2v_map': p2v_map.to(self.device),
-            'v2p_map': v2p_map.to(self.device),
-            'spatial_shape': spatial_shape,
-            'superpoint_mask': [pc_data['superpoint_mask'].to(self.device)],
-            'conditions': [pc_data['condition']],
-        }
-
-    def _generate_text(self, prompt: str, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> str:
-        pc_data = self._prepare_point_cloud(point_cloud)
-        gen_inputs = self._prepare_generation_inputs(pc_data)
-        input_ids = self.tokenizer_special_token(prompt, self.tokenizer, return_tensors='pt').unsqueeze(0).to(self.device)
-
-        with torch.inference_mode():
-            output_ids = self.model.generate(
-                input_ids,
-                coord=gen_inputs['coord'],
-                grid_coord=gen_inputs['grid_coord'],
-                offset=gen_inputs['offset'],
-                feat=gen_inputs['feat'],
-                p2v_map=gen_inputs['p2v_map'],
-                v2p_map=gen_inputs['v2p_map'],
-                spatial_shape=gen_inputs['spatial_shape'],
-                superpoint_mask=gen_inputs['superpoint_mask'],
-                conditions=gen_inputs['conditions'],
-                do_sample=False,
-                temperature=self.temperature,
-                top_p=self.top_p,
-                num_beams=self.num_beams,
-                min_length=1,
-                max_new_tokens=self.max_new_tokens,
-                tokenizer=self.tokenizer,
-                click_mask=[[]],
-                use_cache=True,
-            )
-
-        decoded = self.tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
-        return decoded
-
-    def qa(self, data: Dict[str, Any], prompt: str) -> str:
-        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
-        if point_cloud is None:
-            raise ValueError('Point cloud is required for 3D-LLaVA evaluation')
-
-        return self._generate_text(prompt, point_cloud)
 
 
 class ShapeLLM(QAModelInstance):
@@ -462,185 +330,6 @@ class MiniGPT3D(QAModelInstance):
         return answer
 
 
-
-class GPT4Point(QAModelInstance):
-    def __init__(self, **kwargs):
-        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-        self.model_arch = kwargs.get('gpt4point_arch', 'gpt4point')
-        self.model_type = kwargs.get('gpt4point_type', 'gpt4point_opt2.7b')
-        self.gpt4point_ckpt = kwargs.get('checkpoint_path') or kwargs.get('gpt4point_ckpt')
-        self.point_encoder_ckpt = kwargs.get('gpt4point_point_encoder_ckpt')
-        self.opt_model_path = kwargs.get('gpt4point_opt_model')
-        self.bert_model_path = kwargs.get('gpt4point_bert_model')
-        self.max_length = kwargs.get('max_length', 1024)
-        self.min_length = kwargs.get('min_length', 1)
-        self.num_beams = kwargs.get('num_beams', 1)
-        self.top_p = kwargs.get('top_p', 0.9)
-        self.repetition_penalty = kwargs.get('repetition_penalty', 1.0)
-        self.length_penalty = kwargs.get('length_penalty', 1.0)
-        self.temperature = kwargs.get('temperature', 1.0)
-        self.do_sample = kwargs.get('do_sample', False)
-
-        # Import gpt4point package to trigger lavis aliasing
-        import models.dependence.gpt4point
-
-        from omegaconf import OmegaConf
-        from lavis.common.registry import registry
-        from lavis.models import load_preprocess
-        from lavis.processors.base_processor import BaseProcessor
-
-        if self.bert_model_path:
-            os.environ.setdefault("GPT4POINT_BERT_PATH", self.bert_model_path)
-        if self.point_encoder_ckpt:
-            os.environ.setdefault("GPT4POINT_POINT_ENCODER_CKPT", self.point_encoder_ckpt)
-
-        model_cls = registry.get_model_class(self.model_arch)
-        cfg_path = model_cls.default_config_path(self.model_type)
-        full_cfg = OmegaConf.load(cfg_path)
-        model_cfg = full_cfg.model
-
-        if self.gpt4point_ckpt:
-            model_cfg.load_finetuned = True
-            model_cfg.load_pretrained = False
-            model_cfg.finetuned = self.gpt4point_ckpt
-        if self.opt_model_path:
-            model_cfg.opt_model = self.opt_model_path
-        if self.point_encoder_ckpt:
-            model_cfg.point_encoder_cfg.checkpoint = self.point_encoder_ckpt
-
-        self.model = model_cls.from_config(model_cfg)
-        self.model.eval()
-        self.model.to(self.device)
-
-        preprocess_cfg = getattr(full_cfg, "preprocess", None)
-        if preprocess_cfg is not None:
-            pts_processors, _ = load_preprocess(preprocess_cfg)
-        else:
-            pts_processors = None
-        self.pts_processor = pts_processors.get("eval") if pts_processors else BaseProcessor()
-
-    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
-        pc = load_point_cloud(point_cloud)
-        if isinstance(pc, torch.Tensor):
-            pc = pc.cpu().numpy()
-
-        if pc.shape[1] == 3:
-            white_color = np.array([1.0, 1.0, 1.0], dtype=np.float32)
-            white_colors = np.tile(white_color, (pc.shape[0], 1))
-            pc = np.concatenate((pc, white_colors), axis=1)
-
-        if self.pts_processor is not None:
-            pc = self.pts_processor(pc)
-
-        pc_tensor = torch.as_tensor(pc, dtype=torch.float32, device=self.device)
-        if pc_tensor.ndim == 2:
-            pc_tensor = pc_tensor.unsqueeze(0)
-        return pc_tensor
-
-    def qa(self, data: Dict[str, Any], prompt: str) -> str:
-        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
-        if point_cloud is None:
-            raise ValueError('Point cloud is required for GPT4Point evaluation')
-
-        point_tensor = self._prepare_point_cloud(point_cloud)
-        samples = {
-            "point": point_tensor,
-            "text_input": [prompt],
-        }
-
-        with torch.inference_mode():
-            outputs = self.model.generate(
-                samples,
-                use_nucleus_sampling=self.do_sample,
-                num_beams=self.num_beams,
-                max_length=self.max_length,
-                min_length=self.min_length,
-                # top_p=self.top_p,
-                repetition_penalty=self.repetition_penalty,
-                length_penalty=self.length_penalty,
-                temperature=self.temperature,
-            )
-
-        return outputs[0].strip()
-
-
-
-class PointBind(QAModelInstance):
-    def __init__(self, **kwargs):
-        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
-        self.adapter_path = kwargs.get('checkpoint_path')
-        if self.adapter_path is None:
-            raise ValueError("PointBind requires checkpoint_path for the Point-LLM adapter")
-
-        self.llama_dir = kwargs.get('llama_dir') or kwargs.get('pointbind_llama_dir')
-        if self.llama_dir is None:
-            raise ValueError("PointBind requires llama_dir to load LLaMA weights")
-
-        self.llama_type = kwargs.get('llama_type', '7B')
-        self.llama_knn = kwargs.get('llama_knn', False)
-        self.cache_size = kwargs.get('cache_size', 10)
-        self.cache_t = kwargs.get('cache_t', 20)
-        self.cache_weight = kwargs.get('cache_weight', 0.5)
-        self.max_new_tokens = kwargs.get('max_new_tokens', 256)
-        self.temperature = kwargs.get('temperature', 0.1)
-        self.top_p = kwargs.get('top_p', 0.75)
-
-        # Optional i2pmae path for users who keep the pretrained checkpoints separate.
-        # Exposed for CLI parity; not used directly by the Point-LLM adapter but kept for clarity.
-        self.i2pmae_ckpt = kwargs.get('i2pmae_ckpt') or kwargs.get('i2pmae_path')
-
-        from models.dependence.pointbind.ImageBind import data as imagebind_data  # type: ignore
-        from models.dependence.pointbind.llama import load as llama_load, format_prompt  # type: ignore
-
-        self.imagebind_data = imagebind_data
-        self.format_prompt = format_prompt
-
-        # Load the Point-LLM (LLaMA adapter)
-        self.model = llama_load(
-            self.adapter_path,
-            self.llama_dir,
-            device=self.device,
-            knn=self.llama_knn,
-            llama_type=self.llama_type,
-        )
-        self.model.eval()
-
-    def _prepare_point_inputs(self, point_cloud: Union[np.ndarray, torch.Tensor, str]):
-        """Convert various point cloud inputs into Point-Bind expected format."""
-        if isinstance(point_cloud, str):
-            point_tensor = self.imagebind_data.load_and_transform_point_cloud_data([point_cloud], device=self.device)
-        else:
-            pc = load_point_cloud(point_cloud)
-            pc_tensor = torch.as_tensor(pc, dtype=torch.float32)
-            if pc_tensor.ndim == 2:
-                pc_tensor = pc_tensor.unsqueeze(0)
-            point_tensor = pc_tensor.to(self.device)
-
-        return {'Point': [point_tensor, 1]}
-
-    def qa(self, data: Dict[str, Any], prompt: str) -> str:
-        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
-        if point_cloud is None:
-            raise ValueError('Point cloud is required for PointBind evaluation')
-
-        inputs = self._prepare_point_inputs(point_cloud)
-        formatted_prompt = self.format_prompt(prompt)
-
-        with torch.inference_mode():
-            outputs = self.model.generate(
-                inputs,
-                [formatted_prompt],
-                max_gen_len=self.max_new_tokens,
-                temperature=self.temperature,
-                top_p=self.top_p,
-                cache_size=self.cache_size,
-                cache_t=self.cache_t,
-                cache_weight=self.cache_weight,
-            )
-
-        return outputs[0].strip()
-
-
 class GreenPLM(QAModelInstance):
     def __init__(self, **kwargs):
         self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
@@ -780,6 +469,369 @@ class GreenPLM(QAModelInstance):
         answer = answer.replace("<|end|>", "").strip()
         
         return answer
+
+
+class OneLLM(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        if not str(self.device).startswith('cuda'):
+            raise ValueError("OneLLM evaluation currently requires CUDA.")
+        self.checkpoint_path = kwargs.get('checkpoint_path')
+        if self.checkpoint_path is None:
+            raise ValueError("OneLLM requires checkpoint_path")
+
+        self.dtype_name = kwargs.get('dtype', 'fp16')
+        self.max_new_tokens = int(kwargs.get('max_new_tokens', 256))
+        self.temperature = float(kwargs.get('temperature', 0.1))
+        self.top_p = float(kwargs.get('top_p', 0.75))
+        self.point_format = kwargs.get('point_format', 'xyzrgb')
+        self.no_point_input = bool(kwargs.get('no_point_input', False))
+
+        clip_pretrained_path = kwargs.get('clip_pretrained_path')
+        clip_cache_dir = kwargs.get('clip_cache_dir')
+        offline = bool(kwargs.get('offline', False))
+        if clip_pretrained_path:
+            os.environ['ONELLM_OPENCLIP_PRETRAINED'] = clip_pretrained_path
+        if clip_cache_dir:
+            os.environ['ONELLM_OPENCLIP_CACHE_DIR'] = clip_cache_dir
+        if offline:
+            os.environ['HF_HUB_OFFLINE'] = '1'
+            os.environ['TRANSFORMERS_OFFLINE'] = '1'
+
+        from fairscale.nn.model_parallel import initialize as fs_init
+        import torch.distributed as dist
+        from models.dependence.onellm.util.misc import default_tensor_type, setup_for_distributed
+        from models.dependence.onellm.model.meta import MetaModel
+        from models.dependence.onellm.data.conversation_lib import conv_templates
+        from models.dependence.onellm.data.data_utils import pc_norm
+
+        self.default_tensor_type = default_tensor_type
+        self.conv_templates = conv_templates
+        self.pc_norm = pc_norm
+
+        master_port = int(kwargs.get('master_port', 23591))
+        if not dist.is_initialized():
+            dist.init_process_group(
+                backend='nccl',
+                rank=0,
+                world_size=1,
+                init_method=f'tcp://127.0.0.1:{master_port}',
+            )
+        if not fs_init.model_parallel_is_initialized():
+            fs_init.initialize_model_parallel(1)
+
+        gpu_id = 0
+        if ':' in str(self.device):
+            gpu_id = int(str(self.device).split(':')[-1])
+        torch.cuda.set_device(gpu_id)
+        setup_for_distributed(True)
+
+        self.target_dtype = {'bf16': torch.bfloat16, 'fp16': torch.float16}[self.dtype_name]
+        dep_root = os.path.join(os.path.dirname(__file__), 'dependence', 'onellm')
+        llama_config = os.path.join(dep_root, 'config', 'llama2', '7B.json')
+        tokenizer_path = os.path.join(dep_root, 'config', 'llama2', 'tokenizer.model')
+
+        with self.default_tensor_type(dtype=self.target_dtype, device='cuda'):
+            self.model = MetaModel('onellm', llama_config, None, tokenizer_path)
+
+        checkpoint = torch.load(self.checkpoint_path, map_location='cpu')
+        self.model.load_state_dict(checkpoint, strict=False)
+        self.model.to(self.device, dtype=self.target_dtype)
+        self.model.eval()
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, np.ndarray):
+            pc = torch.from_numpy(pc)
+        elif not isinstance(pc, torch.Tensor):
+            pc = torch.tensor(pc)
+
+        pc = pc.float()
+        pc = self.pc_norm(pc)
+
+        # OneLLM PointPatchEmbed treats channels [:, :, 3:] as xyz.
+        if self.point_format == 'xyzrgb' and pc.shape[1] >= 6:
+            pc = torch.cat((pc[:, 3:], pc[:, :3]), dim=1)
+        return pc.unsqueeze(0)
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None and not self.no_point_input:
+            raise ValueError('Point cloud is required for OneLLM evaluation')
+
+        model_points = None
+        if not self.no_point_input:
+            model_points = self._prepare_point_cloud(point_cloud).to(self.device, dtype=self.target_dtype)
+
+        conv = self.conv_templates['v1'].copy()
+        conv.append_message(conv.roles[0], prompt)
+        conv.append_message(conv.roles[1], None)
+        prompt_text = conv.get_prompt()
+
+        with torch.cuda.amp.autocast(dtype=self.target_dtype):
+            response = self.model.generate(
+                [prompt_text],
+                model_points,
+                self.max_new_tokens,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                modal=['point'],
+            )[0]
+        return response[len(prompt_text):].split('###')[0].strip()
+
+
+class ThreeDR1(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        if isinstance(self.device, str) and self.device.startswith('cuda') and not torch.cuda.is_available():
+            self.device = 'cpu'
+
+        self.checkpoint_path = kwargs.get('checkpoint_path')
+        self.vocab = kwargs.get('vocab')
+        self.qformer_vocab = kwargs.get('qformer_vocab')
+        self.num_points = int(kwargs.get('num_points', 40000))
+        self.max_des_len = int(kwargs.get('max_des_len', 512))
+
+        checkpoint = torch.load(self.checkpoint_path, map_location='cpu', weights_only=False)
+        state_dict = checkpoint.get('model', checkpoint) if isinstance(checkpoint, dict) else checkpoint
+
+        expected_feature_in_channel = None
+        if isinstance(state_dict, dict):
+            first_conv = state_dict.get('detector.tokenizer.mlp_module.layer0.conv.weight')
+            if isinstance(first_conv, torch.Tensor) and first_conv.ndim >= 2:
+                expected_feature_in_channel = max(0, int(first_conv.shape[1]) - 3)
+
+        def _infer_flags(in_channel: int):
+            for use_multiview in (False, True):
+                for use_height in (False, True):
+                    for use_color in (False, True):
+                        for use_normal in (False, True):
+                            cand = 3 * (int(use_color) + int(use_normal)) + int(use_height) + 128 * int(use_multiview)
+                            if cand == in_channel:
+                                return use_color, use_normal, use_height, use_multiview
+            return None
+
+        inferred = _infer_flags(expected_feature_in_channel)
+        inferred_use_color = inferred[0] if inferred else False
+        inferred_use_normal = inferred[1] if inferred else False
+        inferred_use_height = inferred[2] if inferred else True
+        inferred_use_multiview = inferred[3] if inferred else False
+
+        self.use_color = bool(kwargs.get('use_color', inferred_use_color))
+        self.use_normal = bool(kwargs.get('use_normal', inferred_use_normal))
+        self.use_height = bool(kwargs.get('use_height', inferred_use_height))
+        self.use_multiview = bool(kwargs.get('use_multiview', inferred_use_multiview))
+
+        actual_feature_in_channel = 3 * (int(self.use_color) + int(self.use_normal)) + int(self.use_height) + 128 * int(self.use_multiview)
+        if expected_feature_in_channel is not None and actual_feature_in_channel != expected_feature_in_channel:
+            raise ValueError(
+                f"3dr1 input channel mismatch: checkpoint expects feature in_channel={expected_feature_in_channel}, "
+                f"but current flags give {actual_feature_in_channel}. "
+                f"Current flags: use_color={self.use_color}, use_normal={self.use_normal}, "
+                f"use_height={self.use_height}, use_multiview={self.use_multiview}."
+            )
+        self.prompt_template = kwargs.get(
+            'qa_prompt_template',
+            '### human: given the 3D scene, answer the question: "{question}" ### assistant:'
+        )
+        self.debug_model_input = bool(kwargs.get('debug_model_input', True))
+
+        three_dr1_root = os.path.join(os.path.dirname(__file__), 'dependence', '3dr1')
+        if three_dr1_root not in sys.path:
+            sys.path.insert(0, three_dr1_root)
+
+        model_general_module = importlib.import_module('models.dependence.3dr1.models.model_general')
+        dataset_base_module = importlib.import_module('models.dependence.3dr1.dataset.scannet_base_dataset')
+        evaluate_qa_module = importlib.import_module('models.dependence.3dr1.eval_utils.evaluate_qa')
+        pc_util_module = importlib.import_module('models.dependence.3dr1.utils.pc_util')
+        task_prompts_module = importlib.import_module('models.dependence.3dr1.dataset.task_prompts')
+        transformers_module = importlib.import_module('transformers')
+
+        self._extract_ans = evaluate_qa_module._extract_ans
+        self.random_sampling = pc_util_module.random_sampling
+        self.CaptionNet = model_general_module.CaptionNet
+        self.DatasetConfig = dataset_base_module.DatasetConfig
+        self.AutoTokenizer = transformers_module.AutoTokenizer
+
+        if 'qa' in task_prompts_module.TASK_PROPMT and len(task_prompts_module.TASK_PROPMT['qa']) > 0:
+            self.prompt_template = task_prompts_module.TASK_PROPMT['qa'][0]['instruction']
+
+        self.args = self._build_args(kwargs)
+        self.dataset_config = self.DatasetConfig()
+        self.model = self.CaptionNet(self.args, self.dataset_config, train_dataset=None)
+
+        state_dict = checkpoint.get('model', checkpoint) if isinstance(checkpoint, dict) else checkpoint
+        self.model.load_state_dict(state_dict, strict=False)
+        self.model.to(self.device)
+        self.model.eval()
+
+        self.tokenizer = self.AutoTokenizer.from_pretrained(self.vocab, add_bos_token=False)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = 'right'
+
+        self.qtokenizer = self.AutoTokenizer.from_pretrained(self.qformer_vocab)
+        self.qtokenizer.pad_token = self.tokenizer.eos_token
+        self.qtokenizer.padding_side = 'right'
+
+        self.tokenizer_config = dict(
+            max_length=self.max_des_len,
+            padding='max_length',
+            truncation='longest_first',
+            return_tensors='np',
+        )
+
+    def _build_args(self, kwargs):
+        return SimpleNamespace(
+            freeze_detector=bool(kwargs.get('freeze_detector', False)),
+            detector=kwargs.get('detector', 'point_encoder'),
+            captioner=kwargs.get('captioner', '3dr1'),
+            freeze_llm=bool(kwargs.get('freeze_llm', False)),
+            vocab=self.vocab,
+            qformer_vocab=self.qformer_vocab,
+            use_color=self.use_color,
+            use_normal=self.use_normal,
+            use_height=self.use_height,
+            no_height=not self.use_height,
+            use_multiview=self.use_multiview,
+            use_multimodal_model=bool(kwargs.get('use_multimodal_model', False)),
+            use_additional_encoders=bool(kwargs.get('use_additional_encoders', False)),
+            use_depth=bool(kwargs.get('use_depth', True)),
+            use_image=bool(kwargs.get('use_image', True)),
+            depth_encoder_dim=int(kwargs.get('depth_encoder_dim', 256)),
+            image_encoder_dim=int(kwargs.get('image_encoder_dim', 256)),
+            max_multiview_images=int(kwargs.get('max_multiview_images', 8)),
+            max_multiview_depth=int(kwargs.get('max_multiview_depth', 8)),
+            enable_dynamic_views=bool(kwargs.get('enable_dynamic_views', False)),
+            view_selection_weight=float(kwargs.get('view_selection_weight', 0.1)),
+            use_pytorch3d_rendering=bool(kwargs.get('use_pytorch3d_rendering', True)),
+            use_lora=bool(kwargs.get('use_lora', False)),
+            lora_r=int(kwargs.get('lora_r', 16)),
+            lora_alpha=int(kwargs.get('lora_alpha', 32)),
+            lora_dropout=float(kwargs.get('lora_dropout', 0.1)),
+            lora_target_modules=kwargs.get(
+                'lora_target_modules',
+                ["q_proj", "v_proj", "k_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+            ),
+            max_des_len=self.max_des_len,
+            max_gen_len=int(kwargs.get('max_gen_len', 512)),
+            use_beam_search=bool(kwargs.get('use_beam_search', False)),
+            max_prompts=int(kwargs.get('max_prompts', 128)),
+            grid_size_3d=int(kwargs.get('grid_size_3d', 255)),
+        )
+
+    def _prepare_point_features(self, point_cloud: np.ndarray):
+        if point_cloud.ndim != 2 or point_cloud.shape[1] < 3:
+            raise ValueError(f"3dr1 expects point cloud shape [N, C>=3], got {point_cloud.shape}")
+
+        sampled_pc, _ = self.random_sampling(
+            point_cloud, self.num_points, return_choices=True
+        )
+        sampled_pc = sampled_pc.astype(np.float32)
+        xyz = sampled_pc[:, :3]
+
+        extras = []
+        pcl_color = np.zeros_like(xyz, dtype=np.float32)
+        if self.use_color:
+            if sampled_pc.shape[1] >= 6:
+                pcl_color = sampled_pc[:, 3:6].astype(np.float32)
+            extras.append(pcl_color)
+
+        if self.use_normal:
+            if sampled_pc.shape[1] >= 9:
+                normals = sampled_pc[:, 6:9].astype(np.float32)
+            else:
+                normals = np.zeros_like(xyz, dtype=np.float32)
+            extras.append(normals)
+
+        if self.use_height:
+            floor_height = np.percentile(xyz[:, 2], 0.99)
+            height = (xyz[:, 2] - floor_height).astype(np.float32)
+            extras.append(height[:, None])
+
+        if extras:
+            point_features = np.concatenate([xyz] + extras, axis=1)
+        else:
+            point_features = xyz
+
+        dims_min = xyz.min(axis=0).astype(np.float32)
+        dims_max = xyz.max(axis=0).astype(np.float32)
+        return point_features, pcl_color.astype(np.float32), dims_min, dims_max
+
+    def _build_batch(self, point_cloud: np.ndarray, prompt: str):
+        point_features, pcl_color, dims_min, dims_max = self._prepare_point_features(point_cloud)
+        # Force 3dr1 to emit </answer> so generation stops early (captioner uses eos_token_id=</answer>).
+        # Also keep output compatible with evaluate_qa._extract_ans.
+        instruction_text = (
+            "### human: "
+            + prompt.strip()
+            + "\n"
+            + "### assistant:"
+        )
+        self._last_instruction_text = instruction_text
+
+        prompt_inputs = self.tokenizer.batch_encode_plus([instruction_text], **self.tokenizer_config)
+        qformer_inputs = self.qtokenizer.batch_encode_plus([instruction_text], **self.tokenizer_config)
+
+        batch = {
+            'point_clouds': torch.from_numpy(point_features).unsqueeze(0).to(self.device),
+            'point_clouds_color': torch.from_numpy(pcl_color).unsqueeze(0).to(self.device),
+            'point_cloud_dims_min': torch.from_numpy(dims_min).unsqueeze(0).to(self.device),
+            'point_cloud_dims_max': torch.from_numpy(dims_max).unsqueeze(0).to(self.device),
+            'instruction': torch.from_numpy(prompt_inputs['input_ids'][0].astype(np.int64)).unsqueeze(0).to(self.device),
+            'instruction_mask': torch.from_numpy(prompt_inputs['attention_mask'][0].astype(np.float32)).unsqueeze(0).to(self.device),
+            'qformer_input_ids': torch.from_numpy(qformer_inputs['input_ids'][0].astype(np.int64)).unsqueeze(0).to(self.device),
+            'qformer_attention_mask': torch.from_numpy(qformer_inputs['attention_mask'][0].astype(np.float32)).unsqueeze(0).to(self.device),
+        }
+        return batch
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud', None)
+        if point_cloud is None:
+            point_cloud = data.get('point_cloud_path', None)
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for 3dr1 evaluation')
+
+        point_cloud = load_point_cloud(point_cloud)
+        batch = self._build_batch(point_cloud, prompt)
+
+        if self.debug_model_input:
+            print("[3dr1][model_input] instruction:")
+            print(self._last_instruction_text)
+            print(
+                "[3dr1][model_input] shapes:",
+                {
+                    "point_clouds": tuple(batch["point_clouds"].shape),
+                    "point_clouds_color": tuple(batch["point_clouds_color"].shape),
+                    "instruction": tuple(batch["instruction"].shape),
+                    "qformer_input_ids": tuple(batch["qformer_input_ids"].shape),
+                }
+            )
+
+        with torch.inference_mode():
+            outputs = self.model(batch, is_eval=True, task_name='qa')
+
+        decoded = self.tokenizer.batch_decode(
+            outputs['output_ids'],
+            skip_special_tokens=False,
+            clean_up_tokenization_spaces=False,
+        )[0]
+        ans = self._extract_ans(decoded)
+        if not ans:
+            ans = decoded.strip()
+
+        m = re.search(r'answer\s*[:：]?\s*\(?([A-Da-d])\)?', decoded, re.I)
+        if m:
+            return m.group(1).upper()
+        m = re.search(r'^\s*\(?([A-Da-d])\)?\s*\.?\s*$', ans)
+        if m:
+            return m.group(1).upper()
+        m = re.search(r'<answer>\s*([A-Da-d])\s*</answer>', decoded, re.I)
+        if m:
+            return m.group(1).upper()
+
+        # Fall back to extracted text; still lets choice_search work.
+        return ans
+
 
 
 def create_point_qa_model(model_name: str, checkpoint_path: str = None, **kwargs) -> PointQAModel:

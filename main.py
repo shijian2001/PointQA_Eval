@@ -38,7 +38,7 @@ def run_eval(
 
     def default_prompt_func(q, opts=None):
         if opts:
-            return f"{q}\n{chr(10).join(opts)}\n\nAnswer with the option's letter from the given choices directly."
+            return f"{q}\n{chr(10).join(opts)}\n\nAnswer with the option's letter from the given choices directly. Don't output any explanation or extra text.\n"
         return q
 
     prompt_func = default_prompt_func
@@ -156,5 +156,5 @@ def run_eval(
 def main():
     fire.Fire(run_eval)
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
