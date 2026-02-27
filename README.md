@@ -116,6 +116,14 @@ cd OneLLM/model/lib/pointnet2
 python setup.py install
 ```
 
+#### Download checkpoints
+
+```bash
+hf download timm/vit_large_patch14_clip_224.openai --local-dir /model/vit_large_patch14_clip_224
+
+hf download csuhan/OneLLM-7B --local-dir /model/OneLLM-7B 
+```
+
 
 ## Quick Start
 
