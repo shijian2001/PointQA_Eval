@@ -3,7 +3,6 @@ import torch
 import os
 import json
 from models.point_qa_model import PointQAModel
-from models.base_qa_model import make_options
 
 def run_eval(
     model_name: str,
@@ -23,7 +22,7 @@ def run_eval(
     **kwargs
 ):
     real_ckpt = checkpoint_path or test_ckpt
-    if model_name not in ['minigpt3d', 'greenplm', 'gpt4point'] and not real_ckpt:
+    if model_name not in ['minigpt3d', 'pointalign', 'greenplm', 'gpt4point'] and not real_ckpt:
         raise ValueError("必须提供 checkpoint_path 或 test_ckpt")
 
     choices_list = None
@@ -36,12 +35,7 @@ def run_eval(
         except Exception as e:
             raise ValueError(f"choices参数解析失败: {choices}") from e
 
-    def default_prompt_func(q, opts=None):
-        if opts:
-            return f"{q}\n{chr(10).join(opts)}\n\nAnswer with the option's letter from the given choices directly. Don't output any explanation or extra text.\n"
-        return q
-
-    prompt_func = default_prompt_func
+    prompt_func = None
     if prompt_template:
         def prompt_func(q, opts=None):
             if opts:

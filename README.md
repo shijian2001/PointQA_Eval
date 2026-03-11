@@ -124,6 +124,29 @@ hf download timm/vit_large_patch14_clip_224.openai --local-dir /model/vit_large_
 hf download csuhan/OneLLM-7B --local-dir /model/OneLLM-7B 
 ```
 
+### 6. PointAlign
+#### Virtual environment
+Use uv
+```bash
+cd PointQA_Eval
+
+bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
+source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
+
+uv pip install -r requirements_minigpt3d.txt
+```
+
+or use conda
+```bash
+conda env create -f environment.yml
+```
+
+#### Download checkpoints
+```bash
+hf download ShijianW01/PointAlign_weight --local-dir /path
+
+wget -P "/path" "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_flant5xxl.pth"
+```
 
 ## Quick Start
 

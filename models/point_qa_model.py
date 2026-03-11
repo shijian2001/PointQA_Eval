@@ -16,6 +16,7 @@ point_qa_models = {
     "pointllm": ("PointLLM"),
     "onellm": ("OneLLM"),
     "minigpt3d": ("MiniGPT3D"),
+    "pointalign": ("PointAlign"),
     "greenplm": ("GreenPLM"),
     "3dr1": ("ThreeDR1"),
 }
@@ -49,7 +50,6 @@ class PointQAModel(QAModel):
 
         if model_name not in point_qa_models:
             raise ValueError(f"Unknown point QA model: {model_name}")
-
         model_class_name = point_qa_models[model_name]
         print(f"Loading {model_name}...")
         if isinstance(model_class_name, (tuple, list)):
@@ -74,7 +74,7 @@ class PointQAModel(QAModel):
                 "Answer the question based on the provided point cloud.\n"
                 f"Question: {question}\n"
                 f"{options_text}\n"
-                "Output only the answer option."
+                "Output only the answer option, such as: A."
                 # "Can you see the point cloud?"
             )
         return f"Answer the question based on the provided point cloud.\nQuestion: {question}\nOutput only the answer."
@@ -270,7 +270,7 @@ class MiniGPT3D(QAModelInstance):
         self.repetition_penalty = kwargs.get('repetition_penalty', 1.0)
         self.length_penalty = kwargs.get('length_penalty', 1.0)
         self.temperature = kwargs.get('temperature', 0.2)
-        self.do_sample = kwargs.get('do_sample', True)
+        self.do_sample = kwargs.get('do_sample', False)
 
         from minigpt4.common.eval_utils import init_model, prepare_texts
         from minigpt4.conversation.conversation import CONV_VISION
@@ -327,6 +327,125 @@ class MiniGPT3D(QAModelInstance):
         answer = answer.split('###')[0]
         answer = answer.split('Assistant:')[-1].strip()
         
+        return answer
+
+
+class PointAlign(QAModelInstance):
+    def __init__(self, **kwargs):
+        self.device = kwargs.get('device', 'cuda' if torch.cuda.is_available() else 'cpu')
+        self.cfg_path = kwargs.get(
+            'cfg_path',
+            '/home/wangxingjian/PointQA_Eval/models/dependence/pointalign/eval_configs/benchmark_evaluation_paper.yaml',
+        )
+        self.weights_root = kwargs.get('weights_root', '/home/wangxingjian/model/pointalign')
+        self.llama_model_path = kwargs.get('llama_model_path') or os.path.join(self.weights_root, 'Phi_2')
+        self.bert_base_uncased_path = kwargs.get('bert_base_uncased_path') or os.path.join(
+            self.weights_root, 'bert-base-uncased'
+        )
+        self.pc_encoder_path = kwargs.get('pc_encoder_path') or os.path.join(
+            self.weights_root, 'pc_encoder', 'point_model.pth'
+        )
+        self.pretrain_ckpt = kwargs.get('pretrain_ckpt') or os.path.join(
+            self.weights_root, 'pointalign', 'pretrain.pth'
+        )
+        self.finetune_ckpt = kwargs.get('finetune_ckpt') or os.path.join(
+            self.weights_root, 'pointalign', 'finetune.pth'
+        )
+        self.qformer_pretrained_path = kwargs.get('qformer_pretrained_path')
+        if self.qformer_pretrained_path is None:
+            raise ValueError(
+                "PointAlign requires qformer_pretrained_path. "
+                "The released pretrain/finetune checkpoints are delta checkpoints."
+            )
+
+        self.max_new_tokens = kwargs.get('max_new_tokens', 150)
+        self.min_length = kwargs.get('min_length', 10)
+        self.num_beams = kwargs.get('num_beams', 2)
+        self.top_p = kwargs.get('top_p', 0.7)
+        self.repetition_penalty = kwargs.get('repetition_penalty', 1.0)
+        self.length_penalty = kwargs.get('length_penalty', 1.0)
+        self.temperature = kwargs.get('temperature', 0.2)
+        self.do_sample = kwargs.get('do_sample', False)
+
+        for name, path in [
+            ('cfg_path', self.cfg_path),
+            ('llama_model_path', self.llama_model_path),
+            ('bert_base_uncased_path', self.bert_base_uncased_path),
+            ('pc_encoder_path', self.pc_encoder_path),
+            ('pretrain_ckpt', self.pretrain_ckpt),
+            ('finetune_ckpt', self.finetune_ckpt),
+            ('qformer_pretrained_path', self.qformer_pretrained_path),
+        ]:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"PointAlign {name} not found: {path}")
+
+        os.environ['POINTALIGN_WEIGHTS_ROOT'] = self.weights_root
+
+        import models.dependence.pointalign.minigpt4 as minigpt4_pkg
+        from minigpt4.common.eval_utils import init_model, prepare_texts
+        from minigpt4.common.config import Config
+        from minigpt4.common.registry import registry
+        from minigpt4.conversation.conversation import CONV_VISION
+
+        self.prepare_texts = prepare_texts
+        self.conv_temp = CONV_VISION.copy()
+
+        gpu_id = 0
+        if isinstance(self.device, str) and self.device.startswith('cuda') and ':' in self.device:
+            gpu_id = int(self.device.split(':')[1])
+
+        class Args:
+            def __init__(self, cfg_path, gpu_id):
+                self.cfg_path = cfg_path
+                self.gpu_id = gpu_id
+                self.options = None
+
+        args = Args(self.cfg_path, gpu_id)
+        cfg = Config(args)
+        model_config = cfg.model_cfg
+        model_config.llama_model = self.llama_model_path
+        model_config.bert_base_uncased_path = self.bert_base_uncased_path
+        model_config.pc_encoder_ckpt_path = self.pc_encoder_path
+        model_config.ckpt = self.pretrain_ckpt
+        model_config.second_ckpt = self.finetune_ckpt
+        model_config.qformer_pretrained_path = self.qformer_pretrained_path
+        model_cls = registry.get_model_class(model_config.arch)
+        self.model = model_cls.from_config(model_config).to(self.device)
+        self.model.eval()
+
+    def _prepare_point_cloud(self, point_cloud: Union[np.ndarray, torch.Tensor, str]) -> torch.Tensor:
+        pc = load_point_cloud(point_cloud)
+        if isinstance(pc, torch.Tensor):
+            pc = pc.cpu().numpy()
+
+        return torch.from_numpy(pc).float().unsqueeze(0).to(self.device)
+
+    def qa(self, data: Dict[str, Any], prompt: str) -> str:
+        point_cloud = data.get('point_cloud') or data.get('point_cloud_path')
+        if point_cloud is None:
+            raise ValueError('Point cloud is required for PointAlign evaluation')
+
+        point_tensor = self._prepare_point_cloud(point_cloud)
+        texts = self.prepare_texts([prompt], self.conv_temp)
+
+        with torch.inference_mode():
+            answers = self.model.generate(
+                point_tensor,
+                texts,
+                num_beams=self.num_beams,
+                max_new_tokens=self.max_new_tokens,
+                min_length=self.min_length,
+                top_p=self.top_p,
+                repetition_penalty=self.repetition_penalty,
+                length_penalty=self.length_penalty,
+                temperature=self.temperature,
+                do_sample=self.do_sample
+            )
+
+        answer = answers[0].lower().replace('<unk>', '').strip()
+        answer = answer.split('###')[0]
+        answer = answer.split('Assistant:')[-1].strip()
+
         return answer
 
 
