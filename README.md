@@ -84,7 +84,7 @@ uv pip install -r requirements_minigpt3d.txt
 ```
 
 #### Update the model config
-1. Check this issue: [issue](https://github.com/TangYuan96/MiniGPT-3D/issues/6), move [MiniGPT-3D/modeling_phi.py](https://github.com/TangYuan96/MiniGPT-3D/blob/main/modeling_phi.py) to model/phi /modeling_phi.py in the transformers library.
+1. Check this issue: [issue](https://github.com/TangYuan96/MiniGPT-3D/issues/6), move [MiniGPT-3D/modeling_phi.py](https://github.com/TangYuan96/MiniGPT-3D/blob/main/modeling_phi.py) to `model/phi/modeling_phi.py` in the transformers library.
 2. Modify the model path in benchmark config file: [benchmark_evaluation_paper.yaml](models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml)
 
 #### Modify the model path
@@ -148,8 +148,14 @@ hf download ShijianW01/PointAlign_weight --local-dir /path
 wget -P "/path" "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_flant5xxl.pth"
 ```
 
+#### Update the model config
+PointAlign uses the same framework as MiniGPT3D, so you need to modify: 
+- the model path in [benchmark_evaluation_paper.yaml](models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml)
+- move the [modeling_phi.py](models/dependence/minigpt3d/minigpt4/models/modeling_phi.py) to `model/phi /modeling_phi.py` in the transformers library.
+
 ## Quick Start
 
+For all the models, you must modify the model path to your own path in the bash script firstly.
 ```bash
 bash run_eval.sh
 ```
