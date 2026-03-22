@@ -27,6 +27,7 @@ uv sync --active \
         --extra-index-url https://download.pytorch.org/whl/cu130 \
         --index-strategy unsafe-best-match
 ```
+Then use [flash-finder](https://flashattn.dev/#finder) to find the right version of flash-attn for your environment, and install it using `uv pip install flash-attn==<version> --no-build-isolation`.
 
 #### 2.1.3 Install Pointnet2_PyTorch
 
