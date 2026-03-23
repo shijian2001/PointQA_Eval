@@ -74,7 +74,7 @@ class PointQAModel(QAModel):
                 "Answer the question based on the provided point cloud.\n"
                 f"Question: {question}\n"
                 f"{options_text}\n"
-                "Output only the answer option, such as: A."
+                # "Output only the answer option, such as: <answer>A</answer>.\n"
                 # "Can you see the point cloud?"
             )
         return f"Answer the question based on the provided point cloud.\nQuestion: {question}\nOutput only the answer."

@@ -8,9 +8,33 @@ source ~/.bashrc
 ```
 
 ## 2. Supported Models
-### 2.1 Shapellm/Pointllm
+
+### 2.1 Pointllm
 
 #### 2.1.1 Virtual Environment
+
+```bash
+cd PointQA_Eval
+
+uv venv ~/.virtualenvs/pointqa_eval/pointllm --python 3.9
+source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/pointllm
+```
+
+#### 2.1.2 Install Packages
+
+```bash
+uv --project envs/pointllm sync
+```
+
+#### 2.1.3 Download checkpoints
+
+```bash
+hf download RunsenXu/PointLLM_7B_v1.2 --local-dir /path/PointLLM_7B_v1.2
+```
+
+### 2.2 Shapellm
+
+#### 2.2.1 Virtual Environment
 
 Choose your environment path and create it:
 
@@ -21,7 +45,7 @@ bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/dev
 source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/dev
 ```
 
-#### 2.1.2 Install Packages
+#### 2.2.2 Install Packages
 ```bash
 uv sync --active \
         --extra-index-url https://download.pytorch.org/whl/cu130 \
@@ -29,7 +53,7 @@ uv sync --active \
 ```
 Then use [flash-finder](https://flashattn.dev/#finder) to find the right version of flash-attn for your environment, and install it using `uv pip install flash-attn==<version> --no-build-isolation`.
 
-#### 2.1.3 Install Pointnet2_PyTorch
+#### 2.2.3 Install Pointnet2_PyTorch
 
 First, check this [issue](https://github.com/erikwijmans/Pointnet2_PyTorch/issues/174).
 
@@ -39,7 +63,7 @@ cd Pointnet2_PyTorch/pointnet2_ops_lib
 uv pip install -e . --no-build-isolation
 ```
 
-#### 2.1.4 Download Recon++ Weights for ShapeLLM
+#### 2.2.4 Download Recon++ Weights for ShapeLLM
 
 ```bash
 bash recon_download.sh
@@ -47,9 +71,9 @@ bash recon_download.sh
 
 After downloading, the weight file should be located at `PointQA_Eval/checkpoints/recon/large.pth`.
 
-### 2.2 GreenPLM
+### 2.3 GreenPLM
 
-#### 2.2.1 Virtual Environment
+#### 2.3.1 Virtual Environment
 
 Choose your environment path and create it:
 
@@ -62,7 +86,7 @@ source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/greenplm
 uv pip install -r requirements_greenplm.txt
 ```
 
-#### 2.2.2 Install Pointnet2_PyTorch
+#### 2.3.2 Install Pointnet2_PyTorch
 
 First, check this [issue](https://github.com/erikwijmans/Pointnet2_PyTorch/issues/174).
 
@@ -72,9 +96,9 @@ cd Pointnet2_PyTorch/pointnet2_ops_lib
 uv pip install -e . --no-build-isolation
 ```
 
-### 2.3 MiniGPT3D
+### 2.4 MiniGPT3D
 
-#### 2.3.1 Virtual Environment
+#### 2.4.1 Virtual Environment
 ```bash
 cd PointQA_Eval
 
@@ -84,11 +108,11 @@ source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
 uv pip install -r requirements_minigpt3d.txt
 ```
 
-#### 2.3.2 Update the Model Configuration
+#### 2.4.2 Update the Model Configuration
 1. Check this [issue](https://github.com/TangYuan96/MiniGPT-3D/issues/6), and move [MiniGPT-3D/modeling_phi.py](https://github.com/TangYuan96/MiniGPT-3D/blob/main/modeling_phi.py) to `transformers/models/phi/modeling_phi.py`.
 2. Update the model paths in [benchmark_evaluation_paper.yaml](models/dependence/minigpt3d/eval_configs/benchmark_evaluation_paper.yaml).
 
-#### 2.3.3 Modify Local Model Paths
+#### 2.4.3 Modify Local Model Paths
 
 You need to modify the following files:
 - [conversation.py](models/dependence/minigpt3d/minigpt4/conversation/conversation.py) line 20
@@ -101,8 +125,8 @@ tokenizer = AutoTokenizer.from_pretrained("model/MiniGPT-3D/params_weight/Phi_2"
 
 Replace the example path with your actual local model path.
 
-### 2.4 OneLLM
-#### 2.4.1 Virtual Environment
+### 2.5 OneLLM
+#### 2.5.1 Virtual Environment
 ```bash
 cd PointQA_Eval
 
@@ -117,7 +141,7 @@ cd OneLLM/model/lib/pointnet2
 python setup.py install
 ```
 
-#### 2.4.2 Download checkpoints
+#### 2.5.2 Download checkpoints
 
 ```bash
 hf download timm/vit_large_patch14_clip_224.openai --local-dir /model/vit_large_patch14_clip_224
@@ -125,8 +149,8 @@ hf download timm/vit_large_patch14_clip_224.openai --local-dir /model/vit_large_
 hf download csuhan/OneLLM-7B --local-dir /model/OneLLM-7B 
 ```
 
-### 2.5 PointAlign
-#### 2.5.1 Virtual Environment
+### 2.6 PointAlign
+#### 2.6.1 Virtual Environment
 
 Using `uv`:
 ```bash
@@ -143,14 +167,14 @@ Or using `conda`:
 conda env create -f environment.yml
 ```
 
-#### 2.5.2 Download Checkpoints
+#### 2.6.2 Download Checkpoints
 ```bash
 hf download ShijianW01/PointAlign_weight --local-dir /path
 
 wget -P "/path" "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_flant5xxl.pth"
 ```
 
-#### 2.5.3 Update the Model Configuration
+#### 2.6.3 Update the Model Configuration
 PointAlign uses the same underlying framework as MiniGPT3D. Before running evaluation, make sure to:
 - update the model paths in [benchmark_evaluation_paper.yaml](models/dependence/pointalign/eval_configs/benchmark_evaluation_paper.yaml)
 - move [modeling_phi.py](models/dependence/pointalign/minigpt4/models/modeling_phi.py) to `transformers/models/phi/modeling_phi.py`
