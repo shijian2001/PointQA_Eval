@@ -17,7 +17,7 @@ source ~/.bashrc
 cd PointQA_Eval
 
 uv venv ~/.virtualenvs/pointqa_eval/pointllm --python 3.9
-source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/pointllm
+source ~/.virtualenvs/pointqa_eval/pointllm/bin/activate
 ```
 
 #### 2.1.2 Install Packages
@@ -30,6 +30,17 @@ uv --project envs/pointllm sync
 
 ```bash
 hf download RunsenXu/PointLLM_7B_v1.2 --local-dir /path/PointLLM_7B_v1.2
+```
+
+#### 2.1.4 Run Evaluation
+```bash
+python3 main.py \
+  --model_name pointllm \
+  --tasks_file ./what_distance_farthest/tasks.jsonl \
+  --point_cloud_dir ./what_distance_farthest/pcd \
+  --checkpoint_path /home/wangxingjian/model/PointLLM_7B_v1.2 \
+  --output_dir ./eval_results/pointllm \
+  --device cuda
 ```
 
 ### 2.2 Shapellm
@@ -102,10 +113,7 @@ uv pip install -e . --no-build-isolation
 ```bash
 cd PointQA_Eval
 
-bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
-source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
-
-uv pip install -r requirements_minigpt3d.txt
+uv --project envs/pointalign sync
 ```
 
 #### 2.4.2 Update the Model Configuration
@@ -156,10 +164,7 @@ Using `uv`:
 ```bash
 cd PointQA_Eval
 
-bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
-source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/minigpt3d
-
-uv pip install -r requirements_minigpt3d.txt
+uv --project envs/pointalign sync
 ```
 
 Or using `conda`:
@@ -171,7 +176,7 @@ conda env create -f environment.yml
 ```bash
 hf download ShijianW01/PointAlign_weight --local-dir /path
 
-wget -P "/path" "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_flant5xxl.pth"
+hf download Vision-CAIR/minigpt4 blip2_pretrained_flant5xxl.pth --local-dir /path --repo-type=space
 ```
 
 #### 2.6.3 Update the Model Configuration

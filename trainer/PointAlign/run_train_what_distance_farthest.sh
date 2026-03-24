@@ -6,6 +6,9 @@ POINTALIGN_ROOT=/home/wangxingjian/PointQA_Eval/trainer/PointAlign
 DATASET_ROOT=/home/wangxingjian/PointQA_Eval/what_distance_farthest
 CUDA_VISIBLE_DEVICES=0
 
+export WANDB_DISABLED=true
+export WANDB_MODE=disabled
+
 cd "$POINTALIGN_ROOT"
 
 echo "[1/2] Prepare PointAlign-format data"

@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -62,6 +63,7 @@ class MiniGPT_3D(MiniGPTBase):
             QFormer_lora_module=["query", "key", "value"],
             pc_linear_layer=2,
             align_qformer_to_llm=False,
+            blip2_pretrained="",
     ):
         super().__init__(
             llama_model=llama_model,
@@ -103,8 +105,11 @@ class MiniGPT_3D(MiniGPTBase):
             train_QFormer_norm=train_QFormer_norm,
             QFormer_lora_module=QFormer_lora_module,
         )
-        self.load_from_pretrained(
-            url_or_filename="https://storage.googleapis.com/sfr-vision-language-research/LAVIS/models/BLIP2/blip2_pretrained_flant5xxl.pth")
+        if blip2_pretrained:
+            print(f"Load BLIP2 checkpoint: {blip2_pretrained}")
+            self.load_from_pretrained(url_or_filename=blip2_pretrained)
+        else:
+            print("Skip BLIP2 pretrained loading (model.blip2_pretrained is empty).")
 
         self.llama_proj = nn.Linear(self.Qformer.config.hidden_size, 4096)
         self.llama_proj2 = nn.Linear(4096, self.llama_model.config.hidden_size)
@@ -302,7 +307,9 @@ class MiniGPT_3D(MiniGPTBase):
     @classmethod
     def init_Qformer(cls, num_query_token, vision_width, freeze, QFormer_lora_r,
                      train_QFormer_norm, QFormer_lora_module):
-        encoder_config = BertConfig.from_pretrained("./params_weight/bert-base-uncased")
+        encoder_config = BertConfig.from_pretrained(
+            os.environ.get("POINTALIGN_BERT_BASE_PATH", "./params_weight/bert-base-uncased")
+        )
         encoder_config.encoder_width = vision_width
         encoder_config.add_cross_attention = True
         encoder_config.cross_attention_freq = 2
@@ -360,6 +367,10 @@ class MiniGPT_3D(MiniGPTBase):
         train_QFormer_norm = cfg.get("train_QFormer_norm", False)
 
         align_qformer_to_llm = cfg.get("align_qformer_to_llm", False)
+        blip2_pretrained = cfg.get("blip2_pretrained", "")
+        cfg_dir = os.environ.get("POINTALIGN_CFG_DIR")
+        if blip2_pretrained and cfg_dir and not os.path.isabs(blip2_pretrained):
+            blip2_pretrained = os.path.join(cfg_dir, blip2_pretrained)
 
         model = cls(
             pc_precision=pc_precision,
@@ -376,6 +387,7 @@ class MiniGPT_3D(MiniGPTBase):
             align_qformer_to_llm=align_qformer_to_llm,
             QFormer_lora_module=QFormer_lora_module,
             train_QFormer_norm=train_QFormer_norm,
+            blip2_pretrained=blip2_pretrained,
         )
 
         ckpt_path = cfg.get("ckpt", "")

@@ -4,7 +4,10 @@ model:
   max_txt_len: 1024
   end_sym: "###"
   llama_model: "./params_weight/Phi_2"
-  ckpt: './params_weight/pointalign/pretrain.pth'  
+  ckpt: './params_weight/pointalign/pretrain.pth'
+  pc_encoder_ckpt: './params_weight/pc_encoder/point_model.pth'
+  bert_model_path: './params_weight/bert-base-uncased'
+  blip2_pretrained: ''
   use_grad_checkpoint: True
   chat_template: True
   lora_r: 64

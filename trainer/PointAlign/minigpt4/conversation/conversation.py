@@ -17,7 +17,6 @@
 # from minigpt4.common.registry import registry
 # from minigpt4.models.pointbert import misc
 
-# tokenizer = AutoTokenizer.from_pretrained("./params_weight/Phi_2")
 
 
 # class SeparatorStyle(Enum):
@@ -404,7 +403,7 @@
 
 #     def _load_objaverse_point_cloud(self, object_id):
 
-#         data_path = './data/objaverse_data'
+#         data_path = os.environ.get("POINTALIGN_OBJAVERSE_DATA_PATH", "./data/objaverse_data")
 
 #         filename = f"{object_id}_8192.npy"
 #         point_cloud = np.load(os.path.join(data_path, filename))
@@ -444,7 +443,10 @@ import plotly.graph_objects as go
 from minigpt4.common.registry import registry
 from minigpt4.models.pointbert import misc
 
-tokenizer = AutoTokenizer.from_pretrained("./params_weight/Phi_2")
+tokenizer = AutoTokenizer.from_pretrained(
+    os.environ.get("POINTALIGN_TOKENIZER_PATH") or os.environ.get("POINTALIGN_LLAMA_MODEL") or "./params_weight/Phi_2",
+    local_files_only=True,
+)
 
 
 class SeparatorStyle(Enum):
@@ -835,7 +837,7 @@ class Chat:
 
     def _load_objaverse_point_cloud(self, object_id):
 
-        data_path = './data/objaverse_data'
+        data_path = os.environ.get("POINTALIGN_OBJAVERSE_DATA_PATH", "./data/objaverse_data")
 
         filename = f"{object_id}_8192.npy"
         point_cloud = np.load(os.path.join(data_path, filename))

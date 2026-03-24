@@ -3,8 +3,11 @@ model:
   model_type: pretrain
   max_txt_len: 1024
   end_sym: "###"
-  llama_model: "./params_weight/Phi_2"
-  ckpt: "./params_weight/pointalign/pretrain.pth"
+  llama_model: "/home/wangxingjian/model/pointalign/Phi_2"
+  ckpt: "/home/wangxingjian/model/pointalign/pointalign/pretrain.pth"
+  pc_encoder_ckpt: "/home/wangxingjian/model/pointalign/pc_encoder/point_model.pth"
+  bert_model_path: "/home/wangxingjian/model/pointalign/bert-base-uncased"
+  blip2_pretrained: "/home/wangxingjian/model/pointalign/blip2_pretrained_flant5xxl.pth"
   use_grad_checkpoint: True
   chat_template: True
   lora_r: 64

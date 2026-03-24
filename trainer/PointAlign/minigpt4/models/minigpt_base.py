@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 
 import torch
@@ -11,7 +12,10 @@ from transformers import StoppingCriteria, StoppingCriteriaList
 
 from minigpt4.conversation.conversation import StoppingCriteriaSub
 from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained("./params_weight/Phi_2")
+tokenizer = AutoTokenizer.from_pretrained(
+    os.environ.get("POINTALIGN_TOKENIZER_PATH") or os.environ.get("POINTALIGN_LLAMA_MODEL") or "./params_weight/Phi_2",
+    local_files_only=True,
+)
 
 class MiniGPTBase(BaseModel):
     """
