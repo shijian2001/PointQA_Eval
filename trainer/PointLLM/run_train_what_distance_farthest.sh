@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ===== Paths =====
 # 数据/模型路径：迁移机器或切实验数据集时优先改这里。
 POINTLLM_ROOT=/home/wangxingjian/PointQA_Eval/trainer/PointLLM
 DATASET_ROOT=/home/wangxingjian/PointQA_Eval/what_distance_farthest
@@ -59,7 +58,6 @@ fi
 
 mkdir -p "$OUTPUT_STAGE1" "$OUTPUT_STAGE2"
 
-# ===== Stage-1 实验常改参数 =====
 # 1) --num_train_epochs
 # 2) --per_device_train_batch_size / --gradient_accumulation_steps（一起决定有效 batch）
 # 3) --learning_rate（Stage-1 常偏大）
@@ -97,7 +95,6 @@ torchrun --nnodes=1 --nproc_per_node="$NPROC_PER_NODE" --master_port="$MASTER_PO
   --point_backbone_ckpt "$POINT_BACKBONE_CKPT" \
   --use_color True
 
-# ===== Stage-2 实验常改参数 =====
 # 1) --per_device_train_batch_size（Stage-2 更易 OOM）
 # 2) --learning_rate（Stage-2 常偏小）
 # 3) --fix_llm（True=只训 projector；False=微调 LLM）

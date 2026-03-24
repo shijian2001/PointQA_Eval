@@ -11,12 +11,27 @@ uv --project envs/pointllm sync
 ### 1.2 Download checkpoints
 
 ```bash
-# point backbone checkpoints
 hf download RunsenXu/PointLLM_7B_v1.1_init --local-dir /path/PointLLM_7B_v1.1_init
 ```
-### 1.3 Run Trainer
+
+### 1.3 Update the Model Configuration
+
+Modify the path in [run_train_what_distance_farthest.sh](/PointQA_Eval/trainer/PointLLM/run_train_what_distance_farthest.sh)
+
+### 1.4 Run Trainer
 
 ```bash
 cd PointQA_Eval/trainer/PointLLM
+bash run_train_what_distance_farthest.sh
+```
+
+### 2.2 Update the Model Configuration
+
+Modify the model path in [finetune_custom_dataset.yaml](/PointQA_Eval/trainer/PointAlign/finetune_custom_dataset.yaml)
+
+### 2.3 Run Trainer
+
+```bash
+cd PointQA_Eval/trainer/PointAlign
 bash run_train_what_distance_farthest.sh
 ```
