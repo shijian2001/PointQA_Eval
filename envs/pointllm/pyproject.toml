@@ -45,6 +45,12 @@ dependencies = [
     "wandb>=0.25.1",
 ]
 
+
+[[tool.uv.index]]
+name = "tsinghua-pypi"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
 [tool.uv.sources]
-transformers = { git = "https://github.com/huggingface/transformers.git", rev = "cae78c46" }
-flash-attn = { url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3%2Bcu118torch2.0cxx11abiFALSE-cp39-cp39-linux_x86_64.whl" }
+transformers = { git = "https://gh-proxy.org/https://github.com/huggingface/transformers.git", rev = "cae78c46" }
+flash-attn = { url = "https://gh-proxy.org/https://github.com/Dao-AILab/flash-attention/releases/download/v2.6.3/flash_attn-2.6.3%2Bcu118torch2.0cxx11abiFALSE-cp39-cp39-linux_x86_64.whl" }
