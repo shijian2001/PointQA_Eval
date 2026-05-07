@@ -19,10 +19,10 @@ def build_prompt(question: str, options: list[str]) -> str:
     option_block = "\n".join(options)
     return (
         "<point>\n"
-        "Answer the following multiple-choice question from the 3D point cloud.\n"
+        "Answer the question based on the provided point cloud.\n"
         f"Question: {question}\n"
         f"Options:\n{option_block}\n"
-        "Reply with the final answer only."
+        "Output only the answer option, such as: Answer: A."
     )
 
 
@@ -31,14 +31,12 @@ def main():
     parser.add_argument(
         "--dataset-root",
         type=Path,
-        default=Path("/home/wangxingjian/PointQA_Eval/what_distance_farthest"),
         help="Dataset root containing tasks.jsonl and pcd/*.npy",
     )
     parser.add_argument(
-        "--pointalign-root",
+        "--pointllm-root",
         type=Path,
-        default=Path("/home/wangxingjian/PointQA_Eval/trainer/PointAlign"),
-        help="PointAlign repository root",
+        help="PointLLM repository root",
     )
     parser.add_argument("--pointnum", type=int, default=8192)
     args = parser.parse_args()
@@ -46,30 +44,41 @@ def main():
     tasks_path = args.dataset_root / "tasks.jsonl"
     pcd_dir = args.dataset_root / "pcd"
 
-    point_data_dir = args.pointalign_root / "data" / "objaverse_data_what_distance_farthest"
-    anno_dir = args.pointalign_root / "data" / "anno_data"
+    point_data_dir = args.pointllm_root / "data" / "pointllm_train_data"
+    anno_dir = args.pointllm_root / "data" / "anno_data"
     anno_dir.mkdir(parents=True, exist_ok=True)
     point_data_dir.mkdir(parents=True, exist_ok=True)
 
     rows = load_jsonl(tasks_path)
 
-    single_round = []
-    linked = 0
+    stage1 = []
+    stage2 = []
 
     for row in rows:
-        object_id = Path(row["point"]).stem
-        src = pcd_dir / row["point"]
+        point_name = row["point"]
+        object_id = Path(point_name).stem
+        src = pcd_dir / point_name
         dst = point_data_dir / f"{object_id}_{args.pointnum}.npy"
 
         if dst.exists() or dst.is_symlink():
             dst.unlink()
         dst.symlink_to(src.resolve())
-        linked += 1
 
         prompt = build_prompt(row["question"], row["options"])
         answer = row["answer"]
 
-        single_round.append(
+        stage1.append(
+            {
+                "object_id": object_id,
+                "conversation_type": "simple_description",
+                "conversations": [
+                    {"from": "human", "value": prompt},
+                    {"from": "gpt", "value": answer},
+                ],
+            }
+        )
+
+        stage2.append(
             {
                 "object_id": object_id,
                 "conversation_type": "single_round",
@@ -80,12 +89,15 @@ def main():
             }
         )
 
-    anno_path = anno_dir / "PointAlign_what_distance_farthest_single_round.json"
-    anno_path.write_text(json.dumps(single_round, ensure_ascii=False, indent=2), encoding="utf-8")
+    stage1_path = anno_dir / "pointllm_train_stage1.json"
+    stage2_path = anno_dir / "pointllm_train_stage2.json"
+    stage1_path.write_text(json.dumps(stage1, ensure_ascii=False, indent=2), encoding="utf-8")
+    stage2_path.write_text(json.dumps(stage2, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"Prepared {len(rows)} samples.")
-    print(f"Linked point clouds: {linked} -> {point_data_dir}")
-    print(f"Annotation: {anno_path}")
+    print(f"Point cloud dir: {point_data_dir}")
+    print(f"Stage-1 anno: {stage1_path}")
+    print(f"Stage-2 anno: {stage2_path}")
 
 
 if __name__ == "__main__":

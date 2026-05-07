@@ -74,7 +74,7 @@ class PointQAModel(QAModel):
                 "Answer the question based on the provided point cloud.\n"
                 f"Question: {question}\n"
                 f"{options_text}\n"
-                # "Output only the answer option, such as: <answer>A</answer>.\n"
+                "Output only the answer option, such as: Answer: A.\n"
                 # "Can you see the point cloud?"
             )
         return f"Answer the question based on the provided point cloud.\nQuestion: {question}\nOutput only the answer."
@@ -102,6 +102,8 @@ class ShapeLLM(QAModelInstance):
         self.top_p = kwargs.get('top_p', None)
         self.num_beams = kwargs.get('num_beams', 1)
         self.max_new_tokens = kwargs.get('max_new_tokens', 2048)
+        self.recon_path = kwargs.get('recon_path')
+        self.EVA_path = kwargs.get('EVA_path')
 
         try:
             from models.dependence.shapellm.llava.utils import disable_torch_init
@@ -125,7 +127,7 @@ class ShapeLLM(QAModelInstance):
         disable_torch_init()
         model_name = get_model_name_from_path(self.model_path)
         self.tokenizer, self.model, self.context_len = load_pretrained_model(
-            self.model_path, self.model_base, model_name
+            self.model_path, self.model_base, model_name, recon_path=self.recon_path, EVA_path=self.EVA_path
         )
         self.model = self.model.to(self.device)
         self.model.eval()

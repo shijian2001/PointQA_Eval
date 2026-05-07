@@ -1,26 +1,27 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=7
 export HF_ENDPOINT=https://hf-mirror.com
 export SENTENCE_TRANSFORMERS_HOME=/home/wangxingjian/model/sentence_transformers
 
 
 # ShapeLLM
-# python main.py \
-#   --model_name shapellm \
-#   --tasks_file ./what_distance_farthest/tasks.jsonl \
-#   --point_cloud_dir ./what_distance_farthest/pcd \
-#   --test_ckpt /home/wangxingjian/model/ShapeLLM-7B-General \
-#   --llava_model_base /home/wangxingjian/model/llava-v1.5-7b \
-#   --output_dir ./eval_results/shapellm \
-#   --device cuda
-
-# PointLLM
-python3 main.py \
-  --model_name pointllm \
+python main.py \
+  --model_name shapellm \
   --tasks_file ./what_distance_farthest/tasks.jsonl \
   --point_cloud_dir ./what_distance_farthest/pcd \
-  --checkpoint_path /home/wangxingjian/model/PointLLM_7B_v1.2 \
-  --output_dir ./eval_results/pointllm \
+  --test_ckpt /home/wangxingjian/model/ShapeLLM_7B_general_v1.0 \
+  --recon_path /home/wangxingjian/PointQA_Eval/checkpoints/recon/large.pth \
+  --EVA_path /home/wangxingjian/model/eva_large_patch14_336.in22k_ft_in22k_in1k/model.safetensors \
+  --output_dir ./eval_results/shapellm \
   --device cuda
+
+# PointLLM
+# python3 main.py \
+#   --model_name pointllm \
+#   --tasks_file ./what_distance_farthest/tasks.jsonl \
+#   --point_cloud_dir ./what_distance_farthest/pcd \
+#   --checkpoint_path /home/wangxingjian/model/PointLLM_7B_v1.2 \
+#   --output_dir ./eval_results/pointllm \
+#   --device cuda
 
 # OneLLM
 # python main.py \

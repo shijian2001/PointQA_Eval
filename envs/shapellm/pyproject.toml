@@ -5,14 +5,27 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "accelerate==0.21.0",
+    "diskcache>=5.6.3",
     "easydict>=1.13",
+    "einops>=0.8.2",
+    "fire>=0.7.1",
+    "huggingface-hub==0.14.1",
+    "matplotlib>=3.10.9",
     "pointnet2-ops",
-    "sentence-transformers>=5.3.0",
+    "plyfile",
+    "requests",
+    "scikit-learn",
+    "sentence-transformers==2.2.2",
+    "sentencepiece",
     "setuptools<82",
+    "timm>=1.0.26",
     "torch==2.9.0",
     "torchaudio==2.9.0",
     "torchvision==0.24.0",
-    "transformers>=5.4.0",
+    "transformers==4.31.0",
+    "openai>=2.32.0",
+    "qwen-vl-utils>=0.0.14",
 ]
 
 [tool.uv.sources]
@@ -20,6 +33,9 @@ torch = { index = "pytorch-cu130" }
 torchvision = { index = "pytorch-cu130" }
 torchaudio = { index = "pytorch-cu130" }
 pointnet2-ops = { path = "../../../Pointnet2_PyTorch/pointnet2_ops_lib", editable = true }
+
+[tool.uv.extra-build-dependencies]
+pointnet2-ops = ["torch"]
 
 [[tool.uv.index]]
 name = "pytorch-cu130"

@@ -14,25 +14,19 @@ source ~/.bashrc
 #### 2.1.1 Virtual Environment
 
 ```bash
-cd PointQA_Eval
+cd PointQA_Eval/envs/pointllm
 
-uv venv ~/.virtualenvs/pointqa_eval/pointllm --python 3.9
-source ~/.virtualenvs/pointqa_eval/pointllm/bin/activate
+uv sync
+source .venv/bin/activate
 ```
 
-#### 2.1.2 Install Packages
-
-```bash
-uv --project envs/pointllm sync
-```
-
-#### 2.1.3 Download checkpoints
+#### 2.1.2 Download checkpoints
 
 ```bash
 hf download RunsenXu/PointLLM_7B_v1.2 --local-dir /path/PointLLM_7B_v1.2
 ```
 
-#### 2.1.4 Run Evaluation
+#### 2.1.3 Run Evaluation
 ```bash
 python3 main.py \
   --model_name pointllm \
@@ -50,23 +44,17 @@ python3 main.py \
 Choose your environment path and create it:
 
 ```bash
-cd PointQA_Eval
+cd PointQA_Eval/envs/shapellm
 
-bash ./scripts/setup_env.sh ~/.virtualenvs/pointqa_eval/dev
-source scripts/activate_env.sh ~/.virtualenvs/pointqa_eval/dev
+uv sync
+source .venv/bin/activate
 ```
 
-#### 2.2.2 Install Packages
-```bash
-uv sync --active \
-        --extra-index-url https://download.pytorch.org/whl/cu130 \
-        --index-strategy unsafe-best-match
-```
-Then use [flash-finder](https://flashattn.dev/#finder) to find the right version of flash-attn for your environment, and install it using `uv pip install flash-attn==<version> --no-build-isolation`.
+#### 2.2.2 Install Pointnet2_PyTorch
 
-#### 2.2.3 Install Pointnet2_PyTorch
+First, check this [issue](https://github.com/erikwijmans/Pointnet2_PyTorch/issues/174). 
 
-First, check this [issue](https://github.com/erikwijmans/Pointnet2_PyTorch/issues/174).
+NOTE: The version of Torch must match the version of CUDA.
 
 ```bash
 git clone https://github.com/erikwijmans/Pointnet2_PyTorch.git
@@ -74,13 +62,35 @@ cd Pointnet2_PyTorch/pointnet2_ops_lib
 uv pip install -e . --no-build-isolation
 ```
 
-#### 2.2.4 Download Recon++ Weights for ShapeLLM
+#### 2.2.3 Download Weights for ShapeLLM
 
 ```bash
-bash recon_download.sh
+hf download qizekun/ReConV2 zeroshot/large/best_modelnet40_overall.pth --local-dir /path/ReconV2_large
+
+hf download timm/eva_large_patch14_336.in22k_ft_in22k_in1k --local-dir /path/eva_large_patch14_336.in22k_ft_in22k_in1k
+
+hf download qizekun/ShapeLLM_7B_general_v1.0 --local-dir /path/ShapeLLM_7B_general_v1.0
 ```
 
-After downloading, the weight file should be located at `PointQA_Eval/checkpoints/recon/large.pth`.
+#### 2.2.4 Run Dynamic Evaluation
+```bash
+python3 compare_random_dynamic.py \
+  --metadata data/texverse/metadata.jsonl \
+  --pcd-dir data/texverse/points_npy \
+  --background_dir data/texverse/background \
+  --layouts AnyPoint/outputs_gpt_oss/layouts.json \
+  --model shapellm \
+  --test-ckpt model/ShapeLLM_7B_general_v1.0 \
+  --recon-path PointQA_Eval/checkpoints/recon/large.pth \
+  --EVA-path model/eva_large_patch14_336.in22k_ft_in22k_in1k/model.safetensors \
+  --output AnyPoint/output/compare_shapellm \
+  --devices cuda:0,cuda:1 \
+  --batch-size 10 \
+  --budget 100 \
+  --pool-size 1000 \
+  --pool-cache-dir AnyPoint/output/pointllm_dyn \
+  --lambda-explore 0.2
+```
 
 ### 2.3 GreenPLM
 
@@ -111,9 +121,9 @@ uv pip install -e . --no-build-isolation
 
 #### 2.4.1 Virtual Environment
 ```bash
-cd PointQA_Eval
+cd PointQA_Eval/envs/pointalign
 
-uv --project envs/pointalign sync
+uv sync
 ```
 
 #### 2.4.2 Update the Model Configuration

@@ -3,11 +3,11 @@ model:
   model_type: pretrain
   max_txt_len: 1024
   end_sym: "###"
-  llama_model: "/home/wangxingjian/model/pointalign/Phi_2"
-  ckpt: "/home/wangxingjian/model/pointalign/pointalign/pretrain.pth"
-  pc_encoder_ckpt: "/home/wangxingjian/model/pointalign/pc_encoder/point_model.pth"
-  bert_model_path: "/home/wangxingjian/model/pointalign/bert-base-uncased"
-  blip2_pretrained: "/home/wangxingjian/model/pointalign/blip2_pretrained_flant5xxl.pth"
+  llama_model: "/path/to/model/pointalign/Phi_2"
+  ckpt: "/path/to/model/pointalign/pointalign/pretrain.pth"
+  pc_encoder_ckpt: "/path/to/model/pointalign/pc_encoder/point_model.pth"
+  bert_model_path: "/path/to/model/pointalign/bert-base-uncased"
+  blip2_pretrained: "/path/to/model/pointalign/blip2_pretrained_flant5xxl.pth"
   use_grad_checkpoint: True
   chat_template: True
   lora_r: 64
@@ -28,8 +28,8 @@ datasets:
         name: "blip_caption"
     sample_ratio: 1
     build_info:
-      data_path: ./data/objaverse_data_what_distance_farthest
-      ann_path: ./data/anno_data/PointAlign_what_distance_farthest_single_round.json
+      data_path: ./data/pointalign_train_data
+      ann_path: ./data/anno_data/pointalign_train_single_round.json
       pointnum: 8192
       conversation_types: "single_round"
       use_color: True
@@ -46,7 +46,7 @@ run:
   warmup_steps: 10
   iters_per_epoch: 20
   seed: 42
-  output_dir: "./output/what_distance_farthest"
+  output_dir: "./output/pointalign_train"
   amp: True
   resume_ckpt_path: null
   evaluate: False
@@ -56,4 +56,4 @@ run:
   dist_url: "env://"
   distributed: False
   wandb_log: False
-  job_name: pointalign_wdf_test
+  job_name: pointalign_train

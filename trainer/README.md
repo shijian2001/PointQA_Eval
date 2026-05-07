@@ -6,6 +6,7 @@
 
 ```bash
 uv --project envs/pointllm sync
+source envs/pointllm/bin/activate
 ```
 
 ### 1.2 Download checkpoints
@@ -23,6 +24,14 @@ Modify the path in [run_train_what_distance_farthest.sh](/PointQA_Eval/trainer/P
 ```bash
 cd PointQA_Eval/trainer/PointLLM
 bash run_train_what_distance_farthest.sh
+```
+## 2. PointAlign
+
+### 2.1 Install Packages
+
+```bash
+uv --project envs/pointalign sync
+source envs/pointalign/bin/activate
 ```
 
 ### 2.2 Update the Model Configuration

@@ -8,6 +8,8 @@ def run_eval(
     model_name: str,
     checkpoint_path: str = None,
     test_ckpt: str = None,
+    recon_path: str = None,
+    EVA_path: str = None,
     question: str = None,
     tasks_file: str = None,
     point_cloud_dir: str = None,
@@ -45,6 +47,10 @@ def run_eval(
     kwargs = dict(kwargs)
     if cfg_path is not None:
         kwargs.setdefault('cfg_path', cfg_path)
+    if recon_path is not None:
+        kwargs.setdefault('recon_path', recon_path)
+    if EVA_path is not None:
+        kwargs.setdefault('EVA_path', EVA_path)
 
     model = PointQAModel(
         model_name=model_name,
